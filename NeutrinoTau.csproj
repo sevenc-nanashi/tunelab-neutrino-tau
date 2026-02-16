@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);external\**</DefaultItemExcludes>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RustManifestPath>$(MSBuildProjectDirectory)\rust\Cargo.toml</RustManifestPath>
+    <RustNativeLibraryName>neutrino_tau_native</RustNativeLibraryName>
+    <RustBuildArgs></RustBuildArgs>
+    <RustBuildArgs Condition="'$(Configuration)' == 'Release'">--release</RustBuildArgs>
+    <RustProfile Condition="'$(Configuration)' == 'Release'">release</RustProfile>
+    <RustProfile Condition="'$(RustProfile)' == ''">debug</RustProfile>
+    <RustOutputDir>$(MSBuildProjectDirectory)\rust\target\$(RustProfile)</RustOutputDir>
+    <RustNativeLibraryPath>$(RustOutputDir)\$(RustNativeLibraryName).dll</RustNativeLibraryPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+    <ProjectReference Include=".\external\tunelab\TuneLab.Base\TuneLab.Base.csproj" />
+    <ProjectReference Include=".\external\tunelab\TuneLab.Extensions.Voices\TuneLab.Extensions.Voices.csproj" />
+  </ItemGroup>
+
+  <Target Name="BuildRustNativeLibrary" BeforeTargets="CoreCompile">
+    <Exec Command="cargo build --manifest-path &quot;$(RustManifestPath)&quot; $(RustBuildArgs)" />
+  </Target>
+
+  <Target Name="CopyRustNativeLibrary" AfterTargets="Build" Condition="Exists('$(RustNativeLibraryPath)')">
+    <Copy SourceFiles="$(RustNativeLibraryPath)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

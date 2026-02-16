@@ -1,0 +1,11 @@
+{
+  "name": "Neutrino Tau",
+  "company": "sevenc-nanashi",
+  "platforms": [
+    "win-x64"
+  ],
+  "assemblies": [
+    "NeutrinoTau.dll"
+  ],
+  "version": "0.1.0"
+}
