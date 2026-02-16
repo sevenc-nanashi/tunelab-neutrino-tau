@@ -2,4 +2,3 @@
 pub struct Config {
     pub neutrino_path: Option<String>,
 }
-

@@ -1,7 +1,57 @@
 #![allow(clippy::missing_safety_doc)]
 mod config;
 mod engine;
+mod label;
 mod speaker;
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SynthesisTaskPayload {
+    start_time: f64,
+    end_time: f64,
+    duration: f64,
+    part_properties: std::collections::HashMap<String, serde_json::Value>,
+    notes: Vec<SynthesisNotePayload>,
+    pitch: PitchPayload,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SynthesisNotePayload {
+    start_time: f64,
+    end_time: f64,
+    pitch: i32,
+    lyric: String,
+    last_index: Option<usize>,
+    next_index: Option<usize>,
+    properties: std::collections::HashMap<String, serde_json::Value>,
+    phonemes: Vec<SynthesisPhonemePayload>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SynthesisPhonemePayload {
+    symbol: String,
+    start_time: f64,
+    end_time: f64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PitchPayload {
+    times: Vec<f64>,
+    values: Vec<f64>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScaffoldSynthesisResponse {
+    sample_rate: i32,
+    sample_count: i32,
+    note_count: usize,
+    phoneme_count: usize,
+    property_count: usize,
+}
 
 fn clamp_sample_count(duration_sec: f64, sample_rate: i32) -> i32 {
     if !duration_sec.is_finite() || duration_sec <= 0.0 {
@@ -84,6 +134,42 @@ pub unsafe extern "C" fn neutrino_tau_create_engine(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn neutrino_tau_load_voice_sources_json(
+    engine: *mut CEngine,
+    err: *mut *mut std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    if engine.is_null() {
+        if !err.is_null() {
+            let err_msg = create_c_string("Engine is null");
+            *err = err_msg;
+        }
+        return std::ptr::null_mut();
+    }
+
+    let engine = unsafe { &*engine };
+    match engine.engine.load_voices() {
+        Ok(voices) => match serde_json::to_string(&voices) {
+            Ok(json) => create_c_string(&json),
+            Err(e) => {
+                if !err.is_null() {
+                    let err_msg =
+                        create_c_string(&format!("Failed to serialize voice sources: {}", e));
+                    *err = err_msg;
+                }
+                std::ptr::null_mut()
+            }
+        },
+        Err(e) => {
+            if !err.is_null() {
+                let err_msg = create_c_string(&format!("Failed to load voice sources: {}", e));
+                *err = err_msg;
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn neutrino_tau_destroy_engine(engine: *mut CEngine) {
     if !engine.is_null() {
@@ -105,6 +191,117 @@ pub extern "C" fn neutrino_tau_default_sample_rate() -> i32 {
 #[no_mangle]
 pub extern "C" fn neutrino_tau_calculate_sample_count(duration_sec: f64, sample_rate: i32) -> i32 {
     clamp_sample_count(duration_sec, sample_rate)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn neutrino_tau_scaffold_synthesis_task(
+    synthesis_task_json: *const std::ffi::c_char,
+    err: *mut *mut std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    if synthesis_task_json.is_null() {
+        if !err.is_null() {
+            let err_msg = create_c_string("Synthesis task payload is null");
+            unsafe {
+                *err = err_msg;
+            }
+        }
+        return std::ptr::null_mut();
+    }
+
+    let payload_json = unsafe {
+        let cstr = std::ffi::CStr::from_ptr(synthesis_task_json);
+        match cstr.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                if !err.is_null() {
+                    let err_msg = create_c_string("Synthesis task payload is not valid UTF-8");
+                    *err = err_msg;
+                }
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    let payload: SynthesisTaskPayload = match serde_json::from_str(payload_json) {
+        Ok(payload) => payload,
+        Err(e) => {
+            if !err.is_null() {
+                let err_msg =
+                    create_c_string(&format!("Failed to parse synthesis task payload: {}", e));
+                unsafe {
+                    *err = err_msg;
+                }
+            }
+            return std::ptr::null_mut();
+        }
+    };
+
+    let sample_rate = neutrino_tau_default_sample_rate();
+    let duration = if payload.duration.is_finite() {
+        payload.duration
+    } else {
+        payload.end_time - payload.start_time
+    };
+    let sample_count = clamp_sample_count(duration.max(0.0), sample_rate);
+    let phoneme_count = payload.notes.iter().map(|note| note.phonemes.len()).sum();
+    let property_count = payload.part_properties.len()
+        + payload
+            .notes
+            .iter()
+            .map(|note| note.properties.len())
+            .sum::<usize>();
+
+    let _pitch_points = payload.pitch.times.len().min(payload.pitch.values.len());
+    let _note_span_sum = payload
+        .notes
+        .iter()
+        .map(|note| (note.end_time - note.start_time).max(0.0))
+        .sum::<f64>();
+    let _lyric_chars = payload
+        .notes
+        .iter()
+        .map(|note| note.lyric.chars().count())
+        .sum::<usize>();
+    let _pitch_sum = payload.notes.iter().map(|note| note.pitch).sum::<i32>();
+    let _linked_notes = payload
+        .notes
+        .iter()
+        .filter(|note| note.last_index.is_some() || note.next_index.is_some())
+        .count();
+    let _phoneme_span_sum = payload
+        .notes
+        .iter()
+        .flat_map(|note| &note.phonemes)
+        .map(|phoneme| (phoneme.end_time - phoneme.start_time).max(0.0))
+        .sum::<f64>();
+    let _phoneme_symbol_chars = payload
+        .notes
+        .iter()
+        .flat_map(|note| &note.phonemes)
+        .map(|phoneme| phoneme.symbol.chars().count())
+        .sum::<usize>();
+
+    let response = ScaffoldSynthesisResponse {
+        sample_rate,
+        sample_count,
+        note_count: payload.notes.len(),
+        phoneme_count,
+        property_count,
+    };
+
+    match serde_json::to_string(&response) {
+        Ok(json) => create_c_string(&json),
+        Err(e) => {
+            if !err.is_null() {
+                let err_msg =
+                    create_c_string(&format!("Failed to serialize scaffold response: {}", e));
+                unsafe {
+                    *err = err_msg;
+                }
+            }
+            std::ptr::null_mut()
+        }
+    }
 }
 
 #[no_mangle]

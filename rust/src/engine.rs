@@ -3,6 +3,7 @@ use crate::config;
 #[derive(Debug)]
 pub struct Engine {
     neutrino_path: std::path::PathBuf,
+    server: Option<std::process::Child>,
 }
 
 impl Engine {
@@ -34,12 +35,34 @@ impl Engine {
             }
         }
 
+        let neutrino_path = config.neutrino_path.as_ref().unwrap();
+        if !std::path::Path::new(neutrino_path).exists() {
+            return Err(anyhow::anyhow!(
+                "Neutrino path does not exist: {}",
+                neutrino_path
+            ));
+        }
+        let server_path = std::path::Path::new(neutrino_path)
+            .join("bin")
+            .join("neutrino_server.exe");
+        if !server_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Neutrino server executable not found at: {}",
+                server_path.display()
+            ));
+        }
+
+        let server = std::process::Command::new(server_path)
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("Failed to start Neutrino server: {}", e))?;
+
         Ok(Self {
             neutrino_path: config.neutrino_path.unwrap().into(),
+            server: Some(server),
         })
     }
 
-    fn load_voices(&self) -> anyhow::Result<Vec<crate::speaker::VoiceSource>> {
+    pub fn load_voices(&self) -> anyhow::Result<Vec<crate::speaker::VoiceSource>> {
         let mut speakers = Vec::new();
         let models_path = self.neutrino_path.join("model");
         if !models_path.exists() {
@@ -61,5 +84,51 @@ impl Engine {
         }
 
         Ok(speakers)
+    }
+
+    fn invoke_client(&self, args: &[&str]) -> anyhow::Result<String> {
+        let client_path = std::path::Path::new(&self.neutrino_path)
+            .join("bin")
+            .join("neutrino_client.exe");
+        if !client_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Neutrino client executable not found at: {}",
+                client_path.display()
+            ));
+        }
+
+        let output = std::process::Command::new(client_path)
+            .args(args)
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to execute Neutrino client: {}", e))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(anyhow::anyhow!(
+                "Neutrino client error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        if let Ok(status) = self.invoke_client(&["shutdown"]) {
+            println!("Neutrino server shutdown response: {}", status);
+        } else {
+            eprintln!("Failed to send shutdown command to Neutrino server");
+
+            if let Err(e) = self.server.as_mut().unwrap().kill() {
+                eprintln!("Failed to kill Neutrino server process: {}", e);
+            } else {
+                println!("Neutrino server process killed successfully");
+            }
+        }
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
     }
 }

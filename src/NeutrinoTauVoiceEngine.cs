@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using TuneLab.Base.Properties;
 using TuneLab.Base.Structures;
 using TuneLab.Extensions.Voices;
@@ -10,10 +12,10 @@ namespace NeutrinoTau;
 [VoiceEngine("neutrino-tau")]
 public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
 {
-    public IReadOnlyOrderedMap<string, VoiceSourceInfo> VoiceInfos =>
-        new OrderedMap<string, VoiceSourceInfo>();
+    public IReadOnlyOrderedMap<string, VoiceSourceInfo> VoiceInfos => _voiceInfos;
 
     private Native.CEngine* _nativeEngine;
+    private readonly OrderedMap<string, VoiceSourceInfo> _voiceInfos = new();
 
     public IVoiceSource CreateVoiceSource(string id)
     {
@@ -27,6 +29,7 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
             Native.NativeMethods.neutrino_tau_destroy_engine(_nativeEngine);
             _nativeEngine = null;
         }
+        _voiceInfos.Clear();
     }
 
     public unsafe bool Init(string enginePath, out string? error)
@@ -49,13 +52,85 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
             }
         }
 
+        if (!LoadVoiceSources(out error))
+        {
+            Destroy();
+            return false;
+        }
+
         error = null;
         return true;
     }
 
+    private bool LoadVoiceSources(out string? error)
+    {
+        if (_nativeEngine == null)
+        {
+            error = "Engine is not initialized.";
+            return false;
+        }
+
+        byte* errorPtr = null;
+        var voicesJsonPtr = Native.NativeMethods.neutrino_tau_load_voice_sources_json(_nativeEngine, &errorPtr);
+        if (voicesJsonPtr == null)
+        {
+            error = errorPtr != null ? Marshal.PtrToStringUTF8((IntPtr)errorPtr) : "Failed to load voice sources.";
+            if (errorPtr != null)
+            {
+                Native.NativeMethods.neutrino_tau_free_c_string(errorPtr);
+            }
+            return false;
+        }
+
+        try
+        {
+            var voicesJson = Marshal.PtrToStringUTF8((IntPtr)voicesJsonPtr);
+            if (voicesJson == null)
+            {
+                error = "Failed to decode voice source payload.";
+                return false;
+            }
+
+            var voices = JsonSerializer.Deserialize<List<NativeVoiceSource>>(voicesJson) ?? [];
+            _voiceInfos.Clear();
+            foreach (var voice in voices)
+            {
+                if (string.IsNullOrWhiteSpace(voice.Id) || string.IsNullOrWhiteSpace(voice.Name))
+                {
+                    continue;
+                }
+
+                _voiceInfos.Add(
+                    voice.Id,
+                    new VoiceSourceInfo
+                    {
+                        Name = voice.Name,
+                        Description = voice.Description ?? string.Empty,
+                    }
+                );
+            }
+
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to parse voice source payload: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            Native.NativeMethods.neutrino_tau_free_c_string(voicesJsonPtr);
+            if (errorPtr != null)
+            {
+                Native.NativeMethods.neutrino_tau_free_c_string(errorPtr);
+            }
+        }
+    }
+
     private sealed class NeutrinoTauVoiceSource : IVoiceSource
     {
-        public string Name => string.IsNullOrEmpty(_id) ? VoiceSource.Name : _id;
+        public string Name => string.IsNullOrEmpty(_id) ? DefaultVoiceSource.Name : _id;
         public string DefaultLyric { get; } = "a";
         public IReadOnlyOrderedMap<string, AutomationConfig> AutomationConfigs => AutomationConfigMap;
         public IReadOnlyOrderedMap<string, IPropertyConfig> PartProperties => PartPropertyMap;
@@ -82,7 +157,19 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
     private static readonly OrderedMap<string, AutomationConfig> AutomationConfigMap = new();
     private static readonly OrderedMap<string, IPropertyConfig> PartPropertyMap = new();
     private static readonly OrderedMap<string, IPropertyConfig> NotePropertyMap = new();
-    private static readonly VoiceSourceInfo VoiceSource = new()
+    private sealed class NativeVoiceSource
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; init; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; init; }
+    }
+
+    private static readonly VoiceSourceInfo DefaultVoiceSource = new()
     {
         Name = "Neutrino Tau",
         Description = "Scaffold voice source for extension development."
