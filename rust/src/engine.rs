@@ -129,6 +129,6 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        let _ = self.shutdown();
+        self.shutdown();
     }
 }

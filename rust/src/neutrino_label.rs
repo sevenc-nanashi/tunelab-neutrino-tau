@@ -1,5 +1,56 @@
 use lazy_regex::{regex, Regex};
 
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct LabelValue(String);
+
+impl LabelValue {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn as_option(&self) -> Option<&str> {
+        if self.0 == "xx" {
+            None
+        } else {
+            Some(self.0.as_str())
+        }
+    }
+}
+
+impl std::fmt::Debug for LabelValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl std::fmt::Display for LabelValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.as_str())
+    }
+}
+
+impl From<&str> for LabelValue {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl From<String> for LabelValue {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl PartialEq<&str> for LabelValue {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
     pub phoneme: PhonemeContext,
@@ -71,7 +122,7 @@ pub struct PrevNote {
     pub tempo: LabelValue,
     pub length_syllable: LabelValue,
     pub length_centisecond: LabelValue,
-    pub length_32nd_note: LabelValue,
+    pub length_triplet_32nd: LabelValue,
     pub reserved: LabelValue,
 }
 
@@ -84,7 +135,7 @@ pub struct CurrNote {
     pub tempo: LabelValue,
     pub length_syllable: LabelValue,
     pub length_centisecond: LabelValue,
-    pub length_32nd_note: LabelValue,
+    pub length_triplet_32nd: LabelValue,
     pub reserved: LabelValue,
     pub measure_note_position_note_forward: LabelValue,
     pub measure_note_position_note_backward: LabelValue,
@@ -148,7 +199,7 @@ pub struct NextNote {
     pub tempo: LabelValue,
     pub length_syllable: LabelValue,
     pub length_centisecond: LabelValue,
-    pub length_32nd_note: LabelValue,
+    pub length_triplet_32nd: LabelValue,
     pub reserved: LabelValue,
 }
 
@@ -244,7 +295,7 @@ impl std::fmt::Display for Label {
             self.prev_note.tempo,
             self.prev_note.length_syllable,
             self.prev_note.length_centisecond,
-            self.prev_note.length_32nd_note,
+            self.prev_note.length_triplet_32nd,
             self.prev_note.reserved,
             self.curr_note.absolute_pitch,
             self.curr_note.relative_pitch,
@@ -253,7 +304,7 @@ impl std::fmt::Display for Label {
             self.curr_note.tempo,
             self.curr_note.length_syllable,
             self.curr_note.length_centisecond,
-            self.curr_note.length_32nd_note,
+            self.curr_note.length_triplet_32nd,
             self.curr_note.reserved,
             self.curr_note.measure_note_position_note_forward,
             self.curr_note.measure_note_position_note_backward,
@@ -313,7 +364,7 @@ impl std::fmt::Display for Label {
             self.next_note.tempo,
             self.next_note.length_syllable,
             self.next_note.length_centisecond,
-            self.next_note.length_32nd_note,
+            self.next_note.length_triplet_32nd,
             self.next_note.reserved,
             self.prev_phrase.syllable_count,
             self.prev_phrase.phoneme_count,
@@ -334,7 +385,7 @@ pub fn parse_label_line(line: &str) -> Result<Label, ParseError> {
     );
     let captures = re.captures(line).ok_or_else(|| ParseError {
         section: "root",
-        message: "missing required /A..../J sections".to_string(),
+        message: "missing required /A..../J sections".to_string().into(),
     })?;
     let field = |index: usize| -> Result<&str, ParseError> {
         captures
@@ -342,7 +393,7 @@ pub fn parse_label_line(line: &str) -> Result<Label, ParseError> {
             .map(|m| m.as_str().trim())
             .ok_or_else(|| ParseError {
                 section: "root",
-                message: format!("capture {} not found", index),
+                message: format!("capture {} not found", index).into(),
             })
     };
 
@@ -450,7 +501,7 @@ fn parse_d(input: &str) -> Result<PrevNote, ParseError> {
         tempo: fields[4].clone(),
         length_syllable: fields[5].clone(),
         length_centisecond: fields[6].clone(),
-        length_32nd_note: fields[7].clone(),
+        length_triplet_32nd: fields[7].clone(),
         reserved: fields[8].clone(),
     })
 }
@@ -472,7 +523,7 @@ fn parse_e(input: &str) -> Result<CurrNote, ParseError> {
         tempo: fields[4].clone(),
         length_syllable: fields[5].clone(),
         length_centisecond: fields[6].clone(),
-        length_32nd_note: fields[7].clone(),
+        length_triplet_32nd: fields[7].clone(),
         reserved: fields[8].clone(),
         measure_note_position_note_forward: fields[9].clone(),
         measure_note_position_note_backward: fields[10].clone(),
@@ -545,7 +596,7 @@ fn parse_f(input: &str) -> Result<NextNote, ParseError> {
         tempo: fields[4].clone(),
         length_syllable: fields[5].clone(),
         length_centisecond: fields[6].clone(),
-        length_32nd_note: fields[7].clone(),
+        length_triplet_32nd: fields[7].clone(),
         reserved: fields[8].clone(),
     })
 }
@@ -588,18 +639,18 @@ fn capture_fields(
     input: &str,
     expected_fields: usize,
     section: &'static str,
-) -> Result<Vec<String>, ParseError> {
+) -> Result<Vec<LabelValue>, ParseError> {
     let captures = re.captures(input).ok_or_else(|| ParseError {
         section,
-        message: format!("format mismatch: {input}"),
+        message: format!("format mismatch: {input}").into(),
     })?;
     let mut fields = Vec::with_capacity(expected_fields);
     for i in 1..=expected_fields {
         let value = captures.get(i).ok_or_else(|| ParseError {
             section,
-            message: format!("missing capture group {}", i),
+            message: format!("missing capture group {}", i).into(),
         })?;
-        fields.push(value.as_str().trim().to_string());
+        fields.push(LabelValue::from(value.as_str().trim()));
     }
     Ok(fields)
 }

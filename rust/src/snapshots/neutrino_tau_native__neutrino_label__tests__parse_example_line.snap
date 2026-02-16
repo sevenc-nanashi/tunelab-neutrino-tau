@@ -1,5 +1,5 @@
 ---
-source: src/label.rs
+source: src/neutrino_label.rs
 expression: label
 ---
 Label {
@@ -50,7 +50,7 @@ Label {
         tempo: "xx",
         length_syllable: "xx",
         length_centisecond: "xx",
-        length_32nd_note: "xx",
+        length_triplet_32nd: "xx",
         reserved: "xx",
     },
     curr_note: CurrNote {
@@ -61,7 +61,7 @@ Label {
         tempo: "100",
         length_syllable: "1",
         length_centisecond: "240",
-        length_32nd_note: "96",
+        length_triplet_32nd: "96",
         reserved: "xx",
         measure_note_position_note_forward: "1",
         measure_note_position_note_backward: "1",
@@ -123,7 +123,7 @@ Label {
         tempo: "100",
         length_syllable: "1",
         length_centisecond: "60",
-        length_32nd_note: "24",
+        length_triplet_32nd: "24",
         reserved: "xx",
     },
     prev_phrase: PrevPhrase {

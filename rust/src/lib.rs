@@ -1,7 +1,8 @@
 #![allow(clippy::missing_safety_doc)]
 mod config;
 mod engine;
-mod label;
+mod neutrino_label;
+pub mod neutrino_score;
 mod speaker;
 
 #[derive(Debug, serde::Deserialize)]
