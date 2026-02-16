@@ -5,21 +5,31 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using NeutrinoTau.Native;
 using TuneLab.Base.Properties;
+using TuneLab.Base.Structures;
+using TuneLab.Base.Utils;
 using TuneLab.Extensions.Voices;
 
 namespace NeutrinoTau;
 
-public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
+public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 {
   public event Action<SynthesisResult>? Complete;
   public event Action<double>? Progress;
   public event Action<string>? Error;
 
   public NeutrinoTauSynthesisTask(ISynthesisData data)
+    : this(data, null)
+  {
+  }
+
+  internal NeutrinoTauSynthesisTask(ISynthesisData data, Native.CEngine* nativeEngine)
   {
     _data = data;
+    _nativeEngine = nativeEngine;
     _notes = data.Notes.ToList();
     if (_notes.Count == 0)
     {
@@ -32,62 +42,20 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     _endTime = _notes[^1].EndTime;
   }
 
-  public unsafe void Start()
+  public void Start()
   {
-    try
+    lock (_taskLock)
     {
-      var payload = BuildPayload();
-      var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
-      var payloadBytes = Encoding.UTF8.GetBytes(payloadJson + "\0");
-      byte* errorPtr = null;
-      byte* resultPtr = null;
-
-      fixed (byte* payloadPtr = payloadBytes)
+      if (_runningTask is { IsCompleted: false })
       {
-        resultPtr = NativeMethods.neutrino_tau_scaffold_synthesis_task(payloadPtr, &errorPtr);
+        return;
       }
 
-      if (resultPtr == null)
-      {
-        var err = errorPtr != null ? Marshal.PtrToStringUTF8((IntPtr)errorPtr) : "Unknown native error";
-        if (errorPtr != null)
-        {
-          NativeMethods.neutrino_tau_free_c_string(errorPtr);
-        }
-        throw new InvalidOperationException(err ?? "Unknown native error");
-      }
-
-      ScaffoldSynthesisResponse? response;
-      try
-      {
-        var resultJson = Marshal.PtrToStringUTF8((IntPtr)resultPtr);
-        if (string.IsNullOrWhiteSpace(resultJson))
-        {
-          throw new InvalidOperationException("Native scaffold response is empty.");
-        }
-
-        response = JsonSerializer.Deserialize<ScaffoldSynthesisResponse>(resultJson, JsonOptions);
-      }
-      finally
-      {
-        NativeMethods.neutrino_tau_free_c_string(resultPtr);
-        if (errorPtr != null)
-        {
-          NativeMethods.neutrino_tau_free_c_string(errorPtr);
-        }
-      }
-
-      if (response == null)
-      {
-        throw new InvalidOperationException("Failed to parse native scaffold response.");
-      }
-
-      Progress?.Invoke(1.0);
-      Complete?.Invoke(new SynthesisResult(_startTime, response.SampleRate, new float[response.SampleCount]));
-    }
-    catch (Exception ex)
-    {
-      Error?.Invoke($"Native synthesis scaffold failed: {ex.Message}");
+      _cancellationTokenSource?.Cancel();
+      _cancellationTokenSource?.Dispose();
+      _cancellationTokenSource = new CancellationTokenSource();
+      var token = _cancellationTokenSource.Token;
+      _runningTask = Task.Run(() => RunSynthesis(token), token);
     }
   }
 
@@ -101,11 +69,15 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
   public void Stop()
   {
+    lock (_taskLock)
+    {
+      _cancellationTokenSource?.Cancel();
+    }
   }
 
   public void SetDirty(string dirtyType)
   {
-    // Ignore in scaffold implementation.
+    // Ignore in synthesis placeholder implementation.
   }
 
   private SynthesisTaskPayload BuildPayload()
@@ -134,7 +106,7 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     }).ToList();
 
     var pitchTimes = CollectPitchTimes(notePayloads);
-    var pitchValues = _data.Pitch.GetValue(pitchTimes);
+    var pitchValues = SanitizePitchValues(_data.Pitch.GetValue(pitchTimes));
 
     return new SynthesisTaskPayload
     {
@@ -166,12 +138,24 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     var times = new SortedSet<double>();
     foreach (var note in notes)
     {
-      times.Add(note.StartTime);
-      times.Add(note.EndTime);
+      if (double.IsFinite(note.StartTime))
+      {
+        times.Add(note.StartTime);
+      }
+      if (double.IsFinite(note.EndTime))
+      {
+        times.Add(note.EndTime);
+      }
       foreach (var phoneme in note.Phonemes)
       {
-        times.Add(phoneme.StartTime);
-        times.Add(phoneme.EndTime);
+        if (double.IsFinite(phoneme.StartTime))
+        {
+          times.Add(phoneme.StartTime);
+        }
+        if (double.IsFinite(phoneme.EndTime))
+        {
+          times.Add(phoneme.EndTime);
+        }
       }
     }
 
@@ -181,6 +165,16 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     }
 
     return times.ToList();
+  }
+
+  private static double[] SanitizePitchValues(IReadOnlyList<double> values)
+  {
+    var result = new double[values.Count];
+    for (var i = 0; i < values.Count; i++)
+    {
+      result[i] = double.IsFinite(values[i]) ? values[i] : -double.MaxValue;
+    }
+    return result;
   }
 
   private static Dictionary<string, object?> ConvertPropertyObject(PropertyObject propertyObject)
@@ -258,10 +252,13 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     public double[] Values { get; init; } = [];
   }
 
-  private sealed class ScaffoldSynthesisResponse
+  private sealed class SynthesisResponse
   {
     public int SampleRate { get; init; }
     public int SampleCount { get; init; }
+    public float[] Samples { get; init; } = [];
+    public double[] PitchTimes { get; init; } = [];
+    public double[] PitchValues { get; init; } = [];
   }
 
   private static readonly JsonSerializerOptions JsonOptions = new()
@@ -285,7 +282,110 @@ public sealed class NeutrinoTauSynthesisTask : ISynthesisTask
   }
 
   private readonly ISynthesisData _data;
+  private readonly Native.CEngine* _nativeEngine;
   private readonly List<ISynthesisNote> _notes;
   private readonly double _startTime;
   private readonly double _endTime;
+  private readonly object _taskLock = new();
+  private CancellationTokenSource? _cancellationTokenSource;
+  private Task? _runningTask;
+
+  private unsafe void RunSynthesis(CancellationToken token)
+  {
+    try
+    {
+      var payload = BuildPayload();
+      if (_nativeEngine == null)
+      {
+        throw new InvalidOperationException("Native engine is not initialized.");
+      }
+      token.ThrowIfCancellationRequested();
+      var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
+      var payloadBytes = Encoding.UTF8.GetBytes(payloadJson + "\0");
+      byte* errorPtr = null;
+      byte* resultPtr = null;
+
+      try
+      {
+        fixed (byte* payloadPtr = payloadBytes)
+        {
+          resultPtr = NativeMethods.neutrino_tau_synthesize(_nativeEngine, payloadPtr, &errorPtr);
+        }
+
+        token.ThrowIfCancellationRequested();
+
+        if (resultPtr == null)
+        {
+          var err = errorPtr != null ? Marshal.PtrToStringUTF8((IntPtr)errorPtr) : "Unknown native error";
+          throw new InvalidOperationException(err ?? "Unknown native error");
+        }
+
+        var resultJson = Marshal.PtrToStringUTF8((IntPtr)resultPtr);
+        if (string.IsNullOrWhiteSpace(resultJson))
+        {
+          throw new InvalidOperationException("Native synthesis response is empty.");
+        }
+
+        var response = JsonSerializer.Deserialize<SynthesisResponse>(resultJson, JsonOptions);
+        if (response == null)
+        {
+          throw new InvalidOperationException("Failed to parse native synthesis response.");
+        }
+
+        token.ThrowIfCancellationRequested();
+
+        var samples = response.Samples.Length > 0 ? response.Samples : new float[Math.Max(0, response.SampleCount)];
+        var synthesizedPitch = BuildSynthesizedPitch(response.PitchTimes, response.PitchValues);
+        Progress?.Invoke(1.0);
+        Complete?.Invoke(new SynthesisResult(_startTime, response.SampleRate, samples, synthesizedPitch));
+      }
+      finally
+      {
+        if (resultPtr != null)
+        {
+          NativeMethods.neutrino_tau_free_c_string(resultPtr);
+        }
+        if (errorPtr != null)
+        {
+          NativeMethods.neutrino_tau_free_c_string(errorPtr);
+        }
+      }
+    }
+    catch (OperationCanceledException)
+    {
+      // Task was canceled by Stop/SetDirty.
+    }
+    catch (Exception ex)
+    {
+      if (!token.IsCancellationRequested)
+      {
+        Error?.Invoke($"Native synthesis failed: {ex.Message}");
+      }
+    }
+  }
+
+  private static IReadOnlyList<IReadOnlyList<Point>> BuildSynthesizedPitch(
+    IReadOnlyList<double> pitchTimes,
+    IReadOnlyList<double> pitchValues)
+  {
+    var count = Math.Min(pitchTimes.Count, pitchValues.Count);
+    if (count == 0)
+    {
+      return [];
+    }
+
+    var line = new List<Point>(count);
+    for (var i = 0; i < count; i++)
+    {
+      var x = pitchTimes[i];
+      var y = pitchValues[i];
+      if (!double.IsFinite(x) || !double.IsFinite(y))
+      {
+        continue;
+      }
+      line.Add(new Point(x, y));
+    }
+
+    return line.Count == 0 ? [] : [line];
+  }
 }

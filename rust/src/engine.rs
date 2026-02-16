@@ -1,4 +1,5 @@
 use crate::config;
+use std::os::windows::process::CommandExt;
 
 #[derive(Debug)]
 pub struct Engine {
@@ -53,6 +54,7 @@ impl Engine {
         }
 
         let server = std::process::Command::new(server_path)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .spawn()
             .map_err(|e| anyhow::anyhow!("Failed to start Neutrino server: {}", e))?;
 
@@ -86,6 +88,11 @@ impl Engine {
         Ok(speakers)
     }
 
+    pub fn synthesize(&self, synthesis_task_json: &str) -> anyhow::Result<String> {
+        crate::synthesize_task::synthesize_task_json(synthesis_task_json)
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
     fn invoke_client(&self, args: &[&str]) -> anyhow::Result<String> {
         let client_path = std::path::Path::new(&self.neutrino_path)
             .join("bin")
@@ -99,6 +106,7 @@ impl Engine {
 
         let output = std::process::Command::new(client_path)
             .args(args)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to execute Neutrino client: {}", e))?;
 

@@ -19,7 +19,7 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
 
     public IVoiceSource CreateVoiceSource(string id)
     {
-        return new NeutrinoTauVoiceSource(id);
+        return new NeutrinoTauVoiceSource(id, this);
     }
 
     public void Destroy()
@@ -136,9 +136,10 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
         public IReadOnlyOrderedMap<string, IPropertyConfig> PartProperties => PartPropertyMap;
         public IReadOnlyOrderedMap<string, IPropertyConfig> NoteProperties => NotePropertyMap;
 
-        public NeutrinoTauVoiceSource(string id)
+        public NeutrinoTauVoiceSource(string id, NeutrinoTauVoiceEngine owner)
         {
             _id = id;
+            _owner = owner;
         }
 
         public IReadOnlyList<SynthesisSegment<T>> Segment<T>(SynthesisSegment<T> segment) where T : ISynthesisNote
@@ -148,10 +149,11 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
 
         public ISynthesisTask CreateSynthesisTask(ISynthesisData data)
         {
-            return new NeutrinoTauSynthesisTask(data);
+            return new NeutrinoTauSynthesisTask(data, _owner._nativeEngine);
         }
 
         private readonly string _id;
+        private readonly NeutrinoTauVoiceEngine _owner;
     }
 
     private static readonly OrderedMap<string, AutomationConfig> AutomationConfigMap = new();
@@ -172,6 +174,6 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
     private static readonly VoiceSourceInfo DefaultVoiceSource = new()
     {
         Name = "Neutrino Tau",
-        Description = "Scaffold voice source for extension development."
+        Description = "Neutrino Tau voice source for extension development."
     };
 }

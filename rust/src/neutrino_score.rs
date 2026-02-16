@@ -151,7 +151,28 @@ pub fn xx_as_none(value: &str) -> Option<&str> {
     }
 }
 
-pub fn compose_labels_from_score(score: &Score) -> Result<Vec<Label>, ComposeError> {
+#[derive(Clone, PartialEq, Eq)]
+pub struct TimedLabel {
+    pub label: Label,
+    pub start_time_ns: u64,
+    pub end_time_ns: u64,
+}
+
+impl std::ops::Deref for TimedLabel {
+    type Target = Label;
+
+    fn deref(&self) -> &Self::Target {
+        &self.label
+    }
+}
+
+impl std::fmt::Debug for TimedLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.label.fmt(f)
+    }
+}
+
+pub fn compose_labels_from_score(score: &Score) -> Result<Vec<TimedLabel>, ComposeError> {
     let time_signature = score
         .time_signatures
         .first()
@@ -176,6 +197,7 @@ pub fn compose_labels_from_score(score: &Score) -> Result<Vec<Label>, ComposeErr
         .map_err(|e| ComposeError::TemplateParse(e.to_string()))?;
     let points = flatten_points(&score.notes);
     let mut labels = Vec::with_capacity(points.len());
+    let note_time_ranges_ns = compute_note_time_ranges_ns(&score.notes, options.tempo);
 
     for point in &points {
         let mut label = template.clone();
@@ -183,10 +205,41 @@ pub fn compose_labels_from_score(score: &Score) -> Result<Vec<Label>, ComposeErr
         fill_syllable_contexts(&mut label, &score.notes, point.note_index);
         fill_note_contexts(&mut label, &score.notes, point.note_index, &options);
         fill_phrase_and_song_contexts(&mut label, &score.notes, &options);
-        labels.push(label);
+        let (note_start_ns, note_end_ns) = note_time_ranges_ns[point.note_index];
+        let phoneme_count = score.notes[point.note_index].phonemes.len().max(1) as u64;
+        let phoneme_index = point.phoneme_index as u64;
+        let note_span_ns = note_end_ns.saturating_sub(note_start_ns);
+        let start_time_ns =
+            note_start_ns + note_span_ns.saturating_mul(phoneme_index) / phoneme_count;
+        let end_time_ns = note_start_ns
+            + note_span_ns.saturating_mul(phoneme_index.saturating_add(1)) / phoneme_count;
+        labels.push(TimedLabel {
+            label,
+            start_time_ns,
+            end_time_ns,
+        });
     }
 
     Ok(labels)
+}
+
+fn compute_note_time_ranges_ns(notes: &[Note], tempo: i32) -> Vec<(u64, u64)> {
+    let tempo = tempo.max(1) as u128;
+    let mut current_ns: u128 = 0;
+    let mut ranges = Vec::with_capacity(notes.len());
+    for note in notes {
+        let length_triplet_32nd: i32 = note.length.into();
+        let note_duration_ns =
+            (length_triplet_32nd.max(0) as u128).saturating_mul(2_500_000_000_u128) / tempo;
+        let start_ns = current_ns;
+        let end_ns = current_ns.saturating_add(note_duration_ns);
+        ranges.push((
+            start_ns.min(u64::MAX as u128) as u64,
+            end_ns.min(u64::MAX as u128) as u64,
+        ));
+        current_ns = end_ns;
+    }
+    ranges
 }
 
 pub fn labels_to_notes(labels: &[Label]) -> Result<Vec<Note>, ComposeError> {
@@ -720,7 +773,8 @@ mod tests {
         };
 
         let labels = compose_labels_from_score(&score).expect("compose should succeed");
-        let recovered = labels_to_score(&labels).expect("recover should succeed");
+        let plain_labels: Vec<Label> = labels.iter().map(|l| l.label.clone()).collect();
+        let recovered = labels_to_score(&plain_labels).expect("recover should succeed");
 
         assert_eq!(recovered.tempo, 140);
         assert_eq!(
