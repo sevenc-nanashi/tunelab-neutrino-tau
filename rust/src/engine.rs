@@ -1,4 +1,5 @@
 use crate::config;
+use std::io::Write;
 use std::os::windows::process::CommandExt;
 
 #[derive(Debug)]
@@ -54,7 +55,7 @@ impl Engine {
         }
 
         let server = std::process::Command::new(server_path)
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            // .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .spawn()
             .map_err(|e| anyhow::anyhow!("Failed to start Neutrino server: {}", e))?;
 
@@ -89,8 +90,54 @@ impl Engine {
     }
 
     pub fn synthesize(&self, synthesis_task_json: &str) -> anyhow::Result<String> {
-        crate::synthesize_task::synthesize_task_json(synthesis_task_json)
-            .map_err(|e| anyhow::anyhow!(e))
+        let payload =
+            serde_json::from_str::<crate::synthesizer::SynthesisTaskPayload>(synthesis_task_json)
+                .map_err(|e| anyhow::anyhow!("Failed to parse synthesis task payload: {}", e))?;
+        let score = crate::synthesizer::task_notes_to_score(&payload.notes)?;
+        // let label_file = tempfile::NamedTempFile::new()
+        //     .map_err(|e| anyhow::anyhow!("Failed to create temporary label file: {}", e))?;
+        // let label_path = label_file.path().to_string_lossy().to_string();
+        // for label in crate::neutrino_score::compose_labels_from_score(&score)? {
+        //     writeln!(
+        //         label_file.as_file(),
+        //         "{} {} {}",
+        //         label.start_time_ns,
+        //         label.end_time_ns,
+        //         label.label,
+        //     )
+        //     .map_err(|e| anyhow::anyhow!("Failed to write to label file: {}", e))?;
+        // }
+        let label_path = "Z:/test_base.lab";
+        let label_file = std::fs::File::create(&label_path)
+            .map_err(|e| anyhow::anyhow!("Failed to create label file: {}", e))?;
+        for label in crate::neutrino_score::compose_labels_from_score(&score)? {
+            // HTS label timing uses 100ns units.
+            let start_time_100ns = label.start_time_ns / 100;
+            let end_time_100ns = label.end_time_ns / 100;
+            writeln!(
+                &label_file,
+                "{} {} {}",
+                start_time_100ns, end_time_100ns, label.label,
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to write to label file: {}", e))?;
+        }
+        self.invoke_client(&[
+            &label_path,
+            "Z:/test.lab",
+            "Z:/test.f0",
+            "Z:/test.melspec",
+            "Z:/test.wav",
+            self.neutrino_path
+                .join("model")
+                .join(&payload.voice_id)
+                .to_str()
+                .unwrap(),
+            "-n",
+            "4",
+            "-m",
+        ])?;
+
+        anyhow::bail!("TODO");
     }
 
     fn invoke_client(&self, args: &[&str]) -> anyhow::Result<String> {
@@ -106,12 +153,17 @@ impl Engine {
 
         let output = std::process::Command::new(client_path)
             .args(args)
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            // .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to execute Neutrino client: {}", e))?;
 
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            let output = String::from_utf8_lossy(&output.stdout).to_string();
+            if output.contains("Error: ") {
+                Err(anyhow::anyhow!("Neutrino client error: {}", output))
+            } else {
+                Ok(output)
+            }
         } else {
             Err(anyhow::anyhow!(
                 "Neutrino client error: {}",

@@ -149,7 +149,7 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
 
         public ISynthesisTask CreateSynthesisTask(ISynthesisData data)
         {
-            return new NeutrinoTauSynthesisTask(data, _owner._nativeEngine);
+            return new NeutrinoTauSynthesisTask(data, _owner._nativeEngine, _id);
         }
 
         private readonly string _id;

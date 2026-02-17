@@ -48,32 +48,25 @@ impl NoteLength {
     pub fn from_32nd_triplet_note_float(count: f64) -> Self {
         Self(count.round() as i32)
     }
+
+    pub fn to_nanoseconds(&self, tempo: f64) -> u64 {
+        length_triplet_32nd_to_nanoseconds(self.0, tempo)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
     pub pitch: u8,
+    pub start_time_ns: u64,
     pub length: NoteLength,
     pub phonemes: Vec<String>,
     pub language: Option<String>,
     pub language_dependent_context: Option<String>,
 }
 
-impl Note {
-    pub fn new(pitch: u8, length: NoteLength, phonemes: Vec<String>) -> Self {
-        Self {
-            pitch,
-            length,
-            phonemes,
-            language: None,
-            language_dependent_context: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComposeOptions {
-    pub tempo: i32,
+    pub tempo: f64,
     pub beat: String,
     pub key_signature: String,
     pub phrase_count: usize,
@@ -82,7 +75,7 @@ pub struct ComposeOptions {
 impl Default for ComposeOptions {
     fn default() -> Self {
         Self {
-            tempo: 120,
+            tempo: 120.0,
             beat: "4/4".to_string(),
             key_signature: "0".to_string(),
             phrase_count: 1,
@@ -105,10 +98,10 @@ impl Default for TimeSignature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Score {
     pub notes: Vec<Note>,
-    pub tempo: i32,
+    pub tempo: f64,
     pub time_signatures: Vec<TimeSignature>,
 }
 
@@ -116,7 +109,7 @@ impl Default for Score {
     fn default() -> Self {
         Self {
             notes: Vec::new(),
-            tempo: 120,
+            tempo: 120.0,
             time_signatures: vec![TimeSignature::default()],
         }
     }
@@ -223,16 +216,16 @@ pub fn compose_labels_from_score(score: &Score) -> Result<Vec<TimedLabel>, Compo
     Ok(labels)
 }
 
-fn compute_note_time_ranges_ns(notes: &[Note], tempo: i32) -> Vec<(u64, u64)> {
-    let tempo = tempo.max(1) as u128;
+fn compute_note_time_ranges_ns(notes: &[Note], tempo: f64) -> Vec<(u64, u64)> {
     let mut current_ns: u128 = 0;
     let mut ranges = Vec::with_capacity(notes.len());
     for note in notes {
         let length_triplet_32nd: i32 = note.length.into();
         let note_duration_ns =
-            (length_triplet_32nd.max(0) as u128).saturating_mul(2_500_000_000_u128) / tempo;
-        let start_ns = current_ns;
-        let end_ns = current_ns.saturating_add(note_duration_ns);
+            length_triplet_32nd_to_nanoseconds(length_triplet_32nd, tempo) as u128;
+        // Keep legacy sequential behavior when start_time is 0, but honor explicit note start.
+        let start_ns = current_ns.max(note.start_time_ns as u128);
+        let end_ns = start_ns.saturating_add(note_duration_ns);
         ranges.push((
             start_ns.min(u64::MAX as u128) as u64,
             end_ns.min(u64::MAX as u128) as u64,
@@ -255,7 +248,8 @@ pub fn labels_to_score(labels: &[Label]) -> Result<Score, ComposeError> {
         .iter()
         .find_map(|l| l.curr_note.tempo.as_option())
         .and_then(|t| t.parse::<i32>().ok())
-        .unwrap_or(120);
+        .unwrap_or(120)
+        .into();
 
     let time_signature = labels
         .iter()
@@ -263,7 +257,14 @@ pub fn labels_to_score(labels: &[Label]) -> Result<Score, ComposeError> {
         .and_then(parse_time_signature)
         .unwrap_or_default();
 
-    let mut notes = Vec::<Note>::new();
+    let mut notes = vec![Note {
+        pitch: 60,
+        start_time_ns: 0,
+        length: NoteLength::from_4th_note(100),
+        language: Some("JPN".to_string()),
+        language_dependent_context: Some("p".to_string()),
+        phonemes: vec!["pau".to_string()],
+    }];
     let mut current_group_key: Option<String> = None;
 
     for label in labels {
@@ -282,9 +283,20 @@ pub fn labels_to_score(labels: &[Label]) -> Result<Score, ComposeError> {
                 }
                 None => 60,
             };
+            let start_time = notes
+                .last()
+                .map(|prev| {
+                    prev.start_time_ns
+                        .saturating_add(length_triplet_32nd_to_nanoseconds(
+                            prev.length.into(),
+                            tempo,
+                        ))
+                })
+                .unwrap_or(0);
 
             notes.push(Note {
                 pitch,
+                start_time_ns: start_time,
                 length: label
                     .curr_note
                     .length_triplet_32nd
@@ -313,6 +325,23 @@ pub fn labels_to_score(labels: &[Label]) -> Result<Score, ComposeError> {
             }
         }
     }
+    notes.push(Note {
+        pitch: 60,
+        start_time_ns: notes
+            .last()
+            .map(|prev| {
+                prev.start_time_ns
+                    .saturating_add(length_triplet_32nd_to_nanoseconds(
+                        prev.length.into(),
+                        tempo,
+                    ))
+            })
+            .unwrap_or(0),
+        language_dependent_context: Some("p".to_string()),
+        phonemes: vec!["pau".to_string()],
+        language: Some("JPN".to_string()),
+        length: NoteLength::from_4th_note(100),
+    });
 
     Ok(Score {
         notes,
@@ -595,13 +624,27 @@ fn fill_note(
     }
 }
 
-fn length_triplet_32nd_to_centiseconds(length_triplet_32nd: i32, tempo: i32) -> i32 {
-    if tempo <= 0 {
+fn length_triplet_32nd_to_centiseconds(length_triplet_32nd: i32, tempo: f64) -> i32 {
+    if tempo <= 0.0 {
         return 0;
     }
     // 24 triplet-32nd notes = 1 quarter note.
     // centiseconds = length * (60 * 100) / (24 * tempo) = length * 250 / tempo
-    (length_triplet_32nd * 250 + tempo / 2) / tempo
+    (length_triplet_32nd * 250 + (tempo / 2.0) as i32) / tempo as i32
+}
+
+fn length_triplet_32nd_to_nanoseconds(length_triplet_32nd: i32, tempo: f64) -> u64 {
+    if tempo <= 0.0 {
+        return 0;
+    }
+    let ns = (length_triplet_32nd.max(0) as f64) * 2_500_000_000.0 / tempo;
+    if !ns.is_finite() || ns <= 0.0 {
+        0
+    } else if ns >= u64::MAX as f64 {
+        u64::MAX
+    } else {
+        ns.round() as u64
+    }
 }
 
 fn format_pitch_difference(current_pitch: u8, target_pitch: u8) -> String {
@@ -696,6 +739,7 @@ mod tests {
             notes: vec![
                 Note {
                     pitch: 60,
+                    start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["pau".to_string()],
                     language: Some("JPN".to_string()),
@@ -703,6 +747,7 @@ mod tests {
                 },
                 Note {
                     pitch: 60,
+                    start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["p".to_string(), "a".to_string()],
                     language: Some("JPN".to_string()),
@@ -710,13 +755,14 @@ mod tests {
                 },
                 Note {
                     pitch: 60,
+                    start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["pau".to_string()],
                     language: Some("JPN".to_string()),
                     language_dependent_context: Some("0".to_string()),
                 },
             ],
-            tempo: 140,
+            tempo: 140.0,
             time_signatures: vec![TimeSignature {
                 numerator: 3,
                 denominator: 4,
@@ -752,6 +798,7 @@ mod tests {
             notes: vec![
                 Note {
                     pitch: 60,
+                    start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["p".to_string(), "a".to_string()],
                     language: Some("JPN".to_string()),
@@ -759,13 +806,14 @@ mod tests {
                 },
                 Note {
                     pitch: 62,
+                    start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["r".to_string()],
                     language: Some("JPN".to_string()),
                     language_dependent_context: Some("0".to_string()),
                 },
             ],
-            tempo: 140,
+            tempo: 140.0,
             time_signatures: vec![TimeSignature {
                 numerator: 3,
                 denominator: 4,
@@ -776,7 +824,7 @@ mod tests {
         let plain_labels: Vec<Label> = labels.iter().map(|l| l.label.clone()).collect();
         let recovered = labels_to_score(&plain_labels).expect("recover should succeed");
 
-        assert_eq!(recovered.tempo, 140);
+        assert_eq!(recovered.tempo, 140.0);
         assert_eq!(
             recovered.time_signatures,
             vec![TimeSignature {
@@ -794,9 +842,9 @@ mod tests {
 
     #[test]
     fn triplet_length_to_centiseconds() {
-        assert_eq!(length_triplet_32nd_to_centiseconds(24, 100), 60);
-        assert_eq!(length_triplet_32nd_to_centiseconds(96, 100), 240);
-        assert_eq!(length_triplet_32nd_to_centiseconds(24, 140), 43);
+        assert_eq!(length_triplet_32nd_to_centiseconds(24, 100.0), 60);
+        assert_eq!(length_triplet_32nd_to_centiseconds(96, 100.0), 240);
+        assert_eq!(length_triplet_32nd_to_centiseconds(24, 140.0), 43);
     }
 
     #[test]

@@ -22,14 +22,15 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
   public event Action<string>? Error;
 
   public NeutrinoTauSynthesisTask(ISynthesisData data)
-    : this(data, null)
+    : this(data, null, string.Empty)
   {
   }
 
-  internal NeutrinoTauSynthesisTask(ISynthesisData data, Native.CEngine* nativeEngine)
+  internal NeutrinoTauSynthesisTask(ISynthesisData data, Native.CEngine* nativeEngine, string voiceId)
   {
     _data = data;
     _nativeEngine = nativeEngine;
+    _voiceId = voiceId ?? string.Empty;
     _notes = data.Notes.ToList();
     if (_notes.Count == 0)
     {
@@ -110,6 +111,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
     return new SynthesisTaskPayload
     {
+      VoiceId = _voiceId,
       StartTime = _startTime,
       EndTime = _endTime,
       Duration = Math.Max(0.0, _endTime - _startTime),
@@ -219,6 +221,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
   private sealed class SynthesisTaskPayload
   {
+    public string VoiceId { get; init; } = string.Empty;
     public double StartTime { get; init; }
     public double EndTime { get; init; }
     public double Duration { get; init; }
@@ -283,6 +286,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
   private readonly ISynthesisData _data;
   private readonly Native.CEngine* _nativeEngine;
+  private readonly string _voiceId;
   private readonly List<ISynthesisNote> _notes;
   private readonly double _startTime;
   private readonly double _endTime;

@@ -2,9 +2,9 @@
 mod config;
 mod engine;
 mod neutrino_label;
-pub mod neutrino_score;
+mod neutrino_score;
 mod speaker;
-mod synthesize_task;
+mod synthesizer;
 
 static ENGINE_POINTERS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<usize>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));

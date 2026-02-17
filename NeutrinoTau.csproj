@@ -15,7 +15,7 @@
     <RustBuildArgs Condition="'$(Configuration)' == 'Release'">--release</RustBuildArgs>
     <RustProfile Condition="'$(Configuration)' == 'Release'">release</RustProfile>
     <RustProfile Condition="'$(RustProfile)' == ''">debug</RustProfile>
-    <RustOutputDir>$(MSBuildProjectDirectory)\rust\target\$(RustProfile)</RustOutputDir>
+    <RustOutputDir>$(MSBuildProjectDirectory)\target\$(RustProfile)</RustOutputDir>
     <RustNativeLibraryPath>$(RustOutputDir)\$(RustNativeLibraryName).dll</RustNativeLibraryPath>
   </PropertyGroup>
 
