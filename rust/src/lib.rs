@@ -8,6 +8,9 @@ mod synthesizer;
 
 static ENGINE_POINTERS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<usize>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+static CANCEL_TOKEN_POINTERS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashSet<usize>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
 static CSTRING_POINTERS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<usize>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
 
@@ -23,6 +26,44 @@ fn create_c_string(s: &str) -> *mut std::ffi::c_char {
 
 pub struct CEngine {
     engine: std::sync::Mutex<engine::Engine>,
+}
+
+pub struct CancelToken {
+    token: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+#[no_mangle]
+pub extern "C" fn neutrino_tau_create_cancel_token() -> *mut CancelToken {
+    let token = CancelToken {
+        token: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    };
+    let ptr = Box::into_raw(Box::new(token));
+    {
+        let mut pointers = CANCEL_TOKEN_POINTERS.lock().unwrap();
+        pointers.insert(ptr as usize);
+    }
+    ptr
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn neutrino_tau_cancel_token_cancel(token: *mut CancelToken) {
+    if token.is_null() {
+        return;
+    }
+    let token = unsafe { &*token };
+    token.token.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn neutrino_tau_destroy_cancel_token(token: *mut CancelToken) {
+    if !token.is_null() {
+        let ptr = token as usize;
+        let mut pointers = CANCEL_TOKEN_POINTERS.lock().unwrap();
+        if pointers.remove(&ptr) {
+            unsafe {
+                let _ = Box::from_raw(token);
+            }
+        }
+    }
 }
 
 #[no_mangle]
@@ -132,6 +173,7 @@ pub extern "C" fn neutrino_tau_destroy_engine(engine: *mut CEngine) {
 pub unsafe extern "C" fn neutrino_tau_synthesize(
     engine: *mut CEngine,
     synthesis_task_json: *const std::ffi::c_char,
+    cancel_token: *const CancelToken,
     err: *mut *mut std::ffi::c_char,
 ) -> *mut std::ffi::c_char {
     if engine.is_null() {
@@ -181,6 +223,22 @@ pub unsafe extern "C" fn neutrino_tau_synthesize(
             return std::ptr::null_mut();
         }
     };
+    let cancel_token = if cancel_token.is_null() {
+        panic!("Cancel token is null");
+    } else {
+        unsafe { &*cancel_token }
+    };
+    let cancel_token = cancel_token.token.clone();
+    if cancel_token.load(std::sync::atomic::Ordering::SeqCst) {
+        if !err.is_null() {
+            let err_msg = create_c_string("Synthesis cancelled");
+            unsafe {
+                *err = err_msg;
+            }
+        }
+        return std::ptr::null_mut();
+    }
+
     match engine.synthesize(payload_json) {
         Ok(json) => create_c_string(&json),
         Err(e) => {

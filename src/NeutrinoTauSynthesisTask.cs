@@ -56,8 +56,24 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       _cancellationTokenSource?.Cancel();
       _cancellationTokenSource?.Dispose();
       _cancellationTokenSource = new CancellationTokenSource();
+      if (_nativeCancelToken != null)
+      {
+        NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
+        _nativeCancelToken = null;
+      }
+
+      _nativeCancelToken = NativeMethods.neutrino_tau_create_cancel_token();
+      if (_nativeCancelToken == null)
+      {
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = null;
+        Error?.Invoke("Failed to create native cancel token.");
+        return;
+      }
+
       var token = _cancellationTokenSource.Token;
-      _runningTask = Task.Run(() => RunSynthesis(token), token);
+      var nativeCancelToken = _nativeCancelToken;
+      _runningTask = Task.Run(() => RunSynthesis(token, nativeCancelToken), token);
     }
   }
 
@@ -74,12 +90,16 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     lock (_taskLock)
     {
       _cancellationTokenSource?.Cancel();
+      if (_nativeCancelToken != null)
+      {
+        NativeMethods.neutrino_tau_cancel_token_cancel(_nativeCancelToken);
+      }
     }
   }
 
   public void SetDirty(string dirtyType)
   {
-    // Ignore in synthesis placeholder implementation.
+    Stop();
   }
 
   private SynthesisTaskPayload BuildPayload()
@@ -339,8 +359,9 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
   private readonly object _taskLock = new();
   private CancellationTokenSource? _cancellationTokenSource;
   private Task? _runningTask;
+  private Native.CancelToken* _nativeCancelToken;
 
-  private unsafe void RunSynthesis(CancellationToken token)
+  private unsafe void RunSynthesis(CancellationToken token, Native.CancelToken* nativeCancelToken)
   {
     try
     {
@@ -359,7 +380,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       {
         fixed (byte* payloadPtr = payloadBytes)
         {
-          resultPtr = NativeMethods.neutrino_tau_synthesize(_nativeEngine, payloadPtr, &errorPtr);
+          resultPtr = NativeMethods.neutrino_tau_synthesize(_nativeEngine, payloadPtr, nativeCancelToken, &errorPtr);
         }
 
         token.ThrowIfCancellationRequested();
@@ -411,6 +432,17 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       if (!token.IsCancellationRequested)
       {
         Error?.Invoke($"Native synthesis failed: {ex.Message}");
+      }
+    }
+    finally
+    {
+      lock (_taskLock)
+      {
+        if (_nativeCancelToken == nativeCancelToken)
+        {
+          NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
+          _nativeCancelToken = null;
+        }
       }
     }
   }
