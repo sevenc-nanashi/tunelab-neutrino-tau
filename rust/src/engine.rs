@@ -107,10 +107,6 @@ impl Engine {
         let (payload, score, tunelab_start_in_synthesis_time) =
             Self::prepare_synthesis_input(synthesis_task_json)?;
 
-        std::fs::write(
-            std::path::Path::new("z:/synthesis_input_payload.dbg"),
-            format!("{:#?}", payload),
-        )?;
         let timings = self.synthesize_timing(&payload.voice_id, &score)?;
         let mapped_phoneme_groups = self.map_phonemes_to_notes(&score, &timings)?;
         let merged_phonemes = Self::merge_phonemes_with_payload(
@@ -118,10 +114,6 @@ impl Engine {
             &mapped_phoneme_groups,
             tunelab_start_in_synthesis_time,
         );
-        std::fs::write(
-            std::path::Path::new("z:/merged_phonemes.dbg"),
-            format!("{:#?}", merged_phonemes),
-        )?;
 
         let f0_values = self.synthesize_f0(&payload.voice_id, &score, &merged_phonemes)?;
 
@@ -159,11 +151,6 @@ impl Engine {
             wav_data,
             tunelab_start_in_synthesis_time,
         );
-
-        std::fs::write(
-            std::path::Path::new("z:/synthesis_response.json"),
-            serde_json::to_string_pretty(&response)?,
-        )?;
 
         Ok(serde_json::to_string(&response)?)
     }
@@ -273,19 +260,25 @@ impl Engine {
 
     fn build_note_phonemes(
         mapped_phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
+        merged_phonemes: &[crate::synthesizer::TimingLabel],
         tunelab_start_in_synthesis_time: f64,
     ) -> Vec<crate::synthesizer::NotePhonemes> {
+        let mut merged_iter = merged_phonemes.iter();
         mapped_phoneme_groups
             .iter()
             .enumerate()
             .filter_map(|(i, group)| {
+                let current_group = group
+                    .iter()
+                    .filter_map(|_| merged_iter.next())
+                    .collect::<Vec<_>>();
                 if i == 0 || i == mapped_phoneme_groups.len() - 1 {
                     // 最初と最後のグループはpauなのでスキップ
                     None
                 } else {
                     Some(crate::synthesizer::NotePhonemes {
                         note_index: i - 1,
-                        phonemes: group
+                        phonemes: current_group
                             .iter()
                             .map(|p| crate::synthesizer::SynthesizedPhoneme {
                                 start_time: (p.start_time_ns as f64) / 1e9
@@ -344,6 +337,7 @@ impl Engine {
                 .collect(),
             note_phonemes: Self::build_note_phonemes(
                 mapped_phoneme_groups,
+                merged_phonemes,
                 tunelab_start_in_synthesis_time,
             ),
             note_count: payload.notes.len(),
