@@ -24,12 +24,31 @@ impl Engine {
         };
         if config.neutrino_path.is_none() {
             if let Some(result) = native_dialog::FileDialogBuilder::default()
-                .open_single_dir()
+                .set_title("Select neutrino.exe")
+                .add_filter("Executable", ["exe"])
+                .open_single_file()
                 .show()?
             {
-                let path = result.to_string_lossy().to_string();
-                println!("Selected Neutrino path: {}", path);
-                config.neutrino_path = Some(path);
+                if !result.exists() {
+                    return Err(anyhow::anyhow!(
+                        "Selected Neutrino path does not exist: {}",
+                        result.display()
+                    ));
+                }
+                if result.file_name().and_then(|n| n.to_str()) != Some("neutrino.exe") {
+                    return Err(anyhow::anyhow!(
+                        "Selected file is not neutrino.exe: {}",
+                        result.display()
+                    ));
+                }
+                let neutrino_root = result.parent().and_then(|p| p.parent()).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Failed to determine Neutrino root directory from selected path: {}",
+                        result.display()
+                    )
+                })?;
+
+                config.neutrino_path = Some(neutrino_root.to_string_lossy().to_string());
 
                 std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)
                     .map_err(|e| anyhow::anyhow!("Failed to write config file: {}", e))?;
