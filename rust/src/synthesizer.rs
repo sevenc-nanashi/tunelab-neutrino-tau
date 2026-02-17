@@ -2,6 +2,7 @@ use wana_kana::ConvertJapanese;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[expect(dead_code)]
 pub struct SynthesisTaskPayload {
     pub voice_id: String,
     pub start_time: f64,
@@ -16,6 +17,7 @@ pub struct SynthesisTaskPayload {
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[expect(dead_code)]
 pub struct SynthesisNotePayload {
     pub start_time: f64,
     pub end_time: f64,

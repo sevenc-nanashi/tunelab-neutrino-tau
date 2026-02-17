@@ -3,24 +3,6 @@ use lazy_regex::{regex, Regex};
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct LabelValue(String);
 
-impl LabelValue {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn as_option(&self) -> Option<&str> {
-        if self.0 == "xx" {
-            None
-        } else {
-            Some(self.0.as_str())
-        }
-    }
-}
-
 impl std::fmt::Debug for LabelValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.0)
