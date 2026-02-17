@@ -22,7 +22,7 @@ fn create_c_string(s: &str) -> *mut std::ffi::c_char {
 }
 
 pub struct CEngine {
-    engine: engine::Engine,
+    engine: std::sync::Mutex<engine::Engine>,
 }
 
 #[no_mangle]
@@ -58,7 +58,9 @@ pub unsafe extern "C" fn neutrino_tau_create_engine(
         }
     };
 
-    let ptr = Box::into_raw(Box::new(CEngine { engine }));
+    let ptr = Box::into_raw(Box::new(CEngine {
+        engine: std::sync::Mutex::new(engine),
+    }));
     {
         let mut pointers = ENGINE_POINTERS.lock().unwrap();
         pointers.insert(ptr as usize);
@@ -80,7 +82,17 @@ pub unsafe extern "C" fn neutrino_tau_load_voice_sources_json(
     }
 
     let engine = unsafe { &*engine };
-    match engine.engine.load_voices() {
+    let engine = match engine.engine.lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            if !err.is_null() {
+                let err_msg = create_c_string(&format!("Failed to acquire engine lock: {}", e));
+                *err = err_msg;
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    match engine.load_voices() {
         Ok(voices) => match serde_json::to_string(&voices) {
             Ok(json) => create_c_string(&json),
             Err(e) => {
@@ -157,7 +169,19 @@ pub unsafe extern "C" fn neutrino_tau_synthesize(
     };
 
     let engine = unsafe { &*engine };
-    match engine.engine.synthesize(payload_json) {
+    let mut engine = match engine.engine.lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            if !err.is_null() {
+                let err_msg = create_c_string(&format!("Failed to acquire engine lock: {}", e));
+                unsafe {
+                    *err = err_msg;
+                }
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    match engine.synthesize(payload_json) {
         Ok(json) => create_c_string(&json),
         Err(e) => {
             if !err.is_null() {

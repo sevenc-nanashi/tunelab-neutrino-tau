@@ -667,7 +667,7 @@ fn symbol_at(points: &[Point], index: usize, offset: isize) -> &str {
 
 fn midi_to_note_name(pitch: u8) -> String {
     const NOTE_NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+        "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B",
     ];
     let pc = pitch.rem_euclid(12) as usize;
     let octave = pitch.div_euclid(12) - 1;
@@ -679,24 +679,30 @@ fn note_name_to_midi(name: &str) -> Option<u8> {
         return None;
     }
 
-    let (head, octave_str) = if name.as_bytes().get(1) == Some(&b'#') {
-        (&name[..2], &name[2..])
-    } else {
-        (&name[..1], &name[1..])
-    };
+    let (head, octave_str) =
+        if name.as_bytes().get(1) == Some(&b'#') || name.as_bytes().get(1) == Some(&b'b') {
+            (&name[..2], &name[2..])
+        } else {
+            (&name[..1], &name[1..])
+        };
 
     let pitch_class = match head {
         "C" => 0,
         "C#" => 1,
+        "Db" => 1,
         "D" => 2,
         "D#" => 3,
+        "Eb" => 3,
         "E" => 4,
         "F" => 5,
         "F#" => 6,
+        "Gb" => 6,
         "G" => 7,
         "G#" => 8,
+        "Ab" => 8,
         "A" => 9,
         "A#" => 10,
+        "Bb" => 10,
         "B" => 11,
         _ => return None,
     };
