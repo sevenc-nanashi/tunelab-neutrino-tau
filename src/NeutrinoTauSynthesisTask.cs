@@ -106,7 +106,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       }).ToList(),
     }).ToList();
 
-    var pitchTimes = CollectPitchTimes(notePayloads);
+    var pitchTimes = CollectPitchTimes(_startTime, _endTime);
     var pitchValues = SanitizePitchValues(_data.Pitch.GetValue(pitchTimes));
 
     return new SynthesisTaskPayload
@@ -135,38 +135,34 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     return noteIndexMap.TryGetValue(note, out var index) ? index : null;
   }
 
-  private static List<double> CollectPitchTimes(IReadOnlyList<SynthesisNotePayload> notes)
+  private static List<double> CollectPitchTimes(double startTime, double endTime)
   {
-    var times = new SortedSet<double>();
-    foreach (var note in notes)
+    const double stepSeconds = 0.01; // 10ms
+    if (!double.IsFinite(startTime) || !double.IsFinite(endTime))
     {
-      if (double.IsFinite(note.StartTime))
-      {
-        times.Add(note.StartTime);
-      }
-      if (double.IsFinite(note.EndTime))
-      {
-        times.Add(note.EndTime);
-      }
-      foreach (var phoneme in note.Phonemes)
-      {
-        if (double.IsFinite(phoneme.StartTime))
-        {
-          times.Add(phoneme.StartTime);
-        }
-        if (double.IsFinite(phoneme.EndTime))
-        {
-          times.Add(phoneme.EndTime);
-        }
-      }
+      return [0.0];
     }
 
-    if (times.Count == 0)
+    if (endTime < startTime)
     {
-      times.Add(0.0);
+      (startTime, endTime) = (endTime, startTime);
     }
 
-    return times.ToList();
+    var duration = Math.Max(0.0, endTime - startTime);
+    var count = Math.Max(1, (int)Math.Ceiling(duration / stepSeconds) + 1);
+    var times = new List<double>(count);
+    for (var i = 0; i < count; i++)
+    {
+      var t = startTime + i * stepSeconds;
+      times.Add(t > endTime ? endTime : t);
+    }
+
+    if (times[^1] < endTime)
+    {
+      times.Add(endTime);
+    }
+
+    return times;
   }
 
   private static double[] SanitizePitchValues(IReadOnlyList<double> values)
@@ -257,11 +253,19 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
   private sealed class SynthesisResponse
   {
+    public double StartTime { get; init; }
     public int SampleRate { get; init; }
     public int SampleCount { get; init; }
     public float[] Samples { get; init; } = [];
     public double[] PitchTimes { get; init; } = [];
     public double[] PitchValues { get; init; } = [];
+    public NotePhonemesPayload[] NotePhonemes { get; init; } = [];
+  }
+
+  private sealed class NotePhonemesPayload
+  {
+    public int NoteIndex { get; init; }
+    public SynthesisPhonemePayload[] Phonemes { get; init; } = [];
   }
 
   private static readonly JsonSerializerOptions JsonOptions = new()
@@ -340,8 +344,9 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
 
         var samples = response.Samples.Length > 0 ? response.Samples : new float[Math.Max(0, response.SampleCount)];
         var synthesizedPitch = BuildSynthesizedPitch(response.PitchTimes, response.PitchValues);
+        var synthesizedPhonemes = BuildSynthesizedPhonemes(_notes, response.NotePhonemes);
         Progress?.Invoke(1.0);
-        Complete?.Invoke(new SynthesisResult(_startTime, response.SampleRate, samples, synthesizedPitch));
+        Complete?.Invoke(new SynthesisResult(response.StartTime, response.SampleRate, samples, synthesizedPitch, synthesizedPhonemes));
       }
       finally
       {
@@ -391,5 +396,43 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     }
 
     return line.Count == 0 ? [] : [line];
+  }
+
+  private static IReadOnlyDictionary<ISynthesisNote, SynthesizedPhoneme[]> BuildSynthesizedPhonemes(
+    IReadOnlyList<ISynthesisNote> notes,
+    IReadOnlyList<NotePhonemesPayload> notePhonemes)
+  {
+    if (notes.Count == 0)
+    {
+      return new Dictionary<ISynthesisNote, SynthesizedPhoneme[]>(SynthesisNoteReferenceComparer.Instance);
+    }
+
+    var map = new Dictionary<ISynthesisNote, SynthesizedPhoneme[]>(SynthesisNoteReferenceComparer.Instance);
+
+    foreach (var entry in notePhonemes)
+    {
+      if (entry.NoteIndex < 0 || entry.NoteIndex >= notes.Count)
+      {
+        continue;
+      }
+      var mapped = entry.Phonemes
+        .Where(p =>
+          !string.IsNullOrWhiteSpace(p.Symbol)
+          && double.IsFinite(p.StartTime)
+          && double.IsFinite(p.EndTime)
+          && p.EndTime > p.StartTime)
+        .Select(p => new SynthesizedPhoneme
+        {
+          Symbol = p.Symbol,
+          StartTime = p.StartTime,
+          EndTime = p.EndTime,
+        })
+        .ToArray();
+      if (mapped.Length > 0)
+      {
+        map[notes[entry.NoteIndex]] = mapped;
+      }
+    }
+    return map;
   }
 }

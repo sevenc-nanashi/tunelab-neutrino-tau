@@ -43,21 +43,38 @@ pub struct PitchPayload {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SynthesisResponse {
+    pub start_time: f64,
     pub sample_rate: i32,
     pub sample_count: i32,
     pub samples: Vec<f32>,
     pub pitch_times: Vec<f64>,
     pub pitch_values: Vec<f64>,
+    pub note_phonemes: Vec<NotePhonemes>,
     pub note_count: usize,
     pub phoneme_count: usize,
     pub property_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SynthesizedPhoneme {
+    pub symbol: String,
+    pub start_time: f64,
+    pub end_time: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotePhonemes {
+    pub note_index: usize,
+    pub phonemes: Vec<SynthesizedPhoneme>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct LooseF64(pub f64);
 
 impl LooseF64 {
-    fn is_finite(self) -> bool {
+    pub fn is_finite(self) -> bool {
         self.0.is_finite()
     }
 }
@@ -86,6 +103,24 @@ impl<'de> serde::Deserialize<'de> for LooseF64 {
             },
             serde_json::Value::Null => Ok(LooseF64(f64::NAN)),
             _ => Err(serde::de::Error::custom("invalid float type")),
+        }
+    }
+}
+impl serde::Serialize for LooseF64 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if self.0.is_nan() {
+            serializer.serialize_f64(-f64::MAX)
+        } else if self.0.is_infinite() {
+            serializer.serialize_f64(if self.0.is_sign_positive() {
+                f64::MAX
+            } else {
+                -f64::MAX
+            })
+        } else {
+            serializer.serialize_f64(self.0)
         }
     }
 }
@@ -276,6 +311,9 @@ pub fn mora_to_phonemes(mora: &str) -> anyhow::Result<Vec<&'static str>> {
 pub fn task_notes_to_score(
     notes: &[SynthesisNotePayload],
 ) -> anyhow::Result<crate::neutrino_score::Score> {
+    if notes.is_empty() {
+        anyhow::bail!("No notes provided in synthesis task payload");
+    }
     // Synthesis task times are in seconds.
     // Until tempo is provided by payload, use the default score tempo.
     let bpm = 120.0;
@@ -284,14 +322,17 @@ pub fn task_notes_to_score(
         ..Default::default()
     };
 
-    score.notes.push(crate::neutrino_score::Note {
-        pitch: 60,
+    let first_pau = crate::neutrino_score::Note {
+        pitch: None,
         start_time_ns: 0,
         length: crate::neutrino_score::NoteLength::from_4th_note(1),
         language: Some("JPN".to_string()),
         language_dependent_context: Some("p".to_string()),
         phonemes: vec!["pau".to_string()],
-    });
+    };
+    let first_pau_length_ns = first_pau.length.to_nanoseconds(bpm);
+    score.notes.push(first_pau);
+    let first_note_start_time = notes[0].start_time;
     for note in notes {
         let phonemes: Vec<String> = if note.phonemes.is_empty() {
             mora_to_phonemes(&note.lyric)?
@@ -302,14 +343,12 @@ pub fn task_notes_to_score(
             note.phonemes.iter().map(|p| p.symbol.clone()).collect()
         };
 
-        let start_time_ns = if note.start_time.is_finite() && note.start_time > 0.0 {
-            (note.start_time * 1_000_000_000.0).round() as u64
-        } else {
-            0
-        };
+        let start_time_ns = ((note.start_time - first_note_start_time).max(0.0) * 1_000_000_000.0)
+            .round() as u64
+            + first_pau_length_ns;
 
         score.notes.push(crate::neutrino_score::Note {
-            pitch: note.pitch.clamp(0, 127) as u8,
+            pitch: Some(note.pitch.clamp(0, 127) as u8),
             start_time_ns,
             length: crate::neutrino_score::NoteLength::from_4th_note_float(
                 (note.end_time - note.start_time).max(0.0) * (bpm / 60.0),
@@ -320,7 +359,7 @@ pub fn task_notes_to_score(
         });
     }
     score.notes.push(crate::neutrino_score::Note {
-        pitch: 60,
+        pitch: None,
         start_time_ns: score
             .notes
             .last()
@@ -333,6 +372,44 @@ pub fn task_notes_to_score(
     });
 
     Ok(score)
+}
+
+#[derive(Debug, Clone)]
+pub struct TimingLabel {
+    pub start_time_ns: u64,
+    pub end_time_ns: u64,
+    pub phoneme: String,
+}
+
+pub fn parse_timing_label_file(label_file_content: &str) -> anyhow::Result<Vec<TimingLabel>> {
+    let mut labels = Vec::new();
+    for line in label_file_content.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let start_time_100ns = parts[0]
+            .parse::<u64>()
+            .map_err(|e| anyhow::anyhow!("Failed to parse start time in label file: {}", e))?;
+        let end_time_100ns = parts[1]
+            .parse::<u64>()
+            .map_err(|e| anyhow::anyhow!("Failed to parse end time in label file: {}", e))?;
+        let phoneme = parts[2].to_string();
+        labels.push(TimingLabel {
+            start_time_ns: start_time_100ns * 100,
+            end_time_ns: end_time_100ns * 100,
+            phoneme,
+        });
+    }
+
+    Ok(labels)
+}
+
+pub fn freq_to_midi(freq: f32) -> f32 {
+    69.0 + 12.0 * (freq / 440.0).log2()
+}
+pub fn midi_to_freq(midi: f32) -> f32 {
+    440.0 * 2.0_f32.powf((midi - 69.0) / 12.0)
 }
 
 #[cfg(test)]

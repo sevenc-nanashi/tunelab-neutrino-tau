@@ -49,14 +49,14 @@ impl NoteLength {
         Self(count.round() as i32)
     }
 
-    pub fn to_nanoseconds(&self, tempo: f64) -> u64 {
+    pub fn to_nanoseconds(self, tempo: f64) -> u64 {
         length_triplet_32nd_to_nanoseconds(self.0, tempo)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
-    pub pitch: u8,
+    pub pitch: Option<u8>,
     pub start_time_ns: u64,
     pub length: NoteLength,
     pub phonemes: Vec<String>,
@@ -144,25 +144,11 @@ pub fn xx_as_none(value: &str) -> Option<&str> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimedLabel {
     pub label: Label,
     pub start_time_ns: u64,
     pub end_time_ns: u64,
-}
-
-impl std::ops::Deref for TimedLabel {
-    type Target = Label;
-
-    fn deref(&self) -> &Self::Target {
-        &self.label
-    }
-}
-
-impl std::fmt::Debug for TimedLabel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.label.fmt(f)
-    }
 }
 
 pub fn compose_labels_from_score(score: &Score) -> Result<Vec<TimedLabel>, ComposeError> {
@@ -199,17 +185,11 @@ pub fn compose_labels_from_score(score: &Score) -> Result<Vec<TimedLabel>, Compo
         fill_note_contexts(&mut label, &score.notes, point.note_index, &options);
         fill_phrase_and_song_contexts(&mut label, &score.notes, &options);
         let (note_start_ns, note_end_ns) = note_time_ranges_ns[point.note_index];
-        let phoneme_count = score.notes[point.note_index].phonemes.len().max(1) as u64;
-        let phoneme_index = point.phoneme_index as u64;
-        let note_span_ns = note_end_ns.saturating_sub(note_start_ns);
-        let start_time_ns =
-            note_start_ns + note_span_ns.saturating_mul(phoneme_index) / phoneme_count;
-        let end_time_ns = note_start_ns
-            + note_span_ns.saturating_mul(phoneme_index.saturating_add(1)) / phoneme_count;
+        // NOTE: Neutrinoは同じノートであればどの音素でも同じ開始・終了時間になる
         labels.push(TimedLabel {
             label,
-            start_time_ns,
-            end_time_ns,
+            start_time_ns: note_start_ns,
+            end_time_ns: note_end_ns,
         });
     }
 
@@ -233,121 +213,6 @@ fn compute_note_time_ranges_ns(notes: &[Note], tempo: f64) -> Vec<(u64, u64)> {
         current_ns = end_ns;
     }
     ranges
-}
-
-pub fn labels_to_notes(labels: &[Label]) -> Result<Vec<Note>, ComposeError> {
-    Ok(labels_to_score(labels)?.notes)
-}
-
-pub fn labels_to_score(labels: &[Label]) -> Result<Score, ComposeError> {
-    if labels.is_empty() {
-        return Ok(Score::default());
-    }
-
-    let tempo = labels
-        .iter()
-        .find_map(|l| l.curr_note.tempo.as_option())
-        .and_then(|t| t.parse::<i32>().ok())
-        .unwrap_or(120)
-        .into();
-
-    let time_signature = labels
-        .iter()
-        .find_map(|l| l.curr_note.beat.as_option())
-        .and_then(parse_time_signature)
-        .unwrap_or_default();
-
-    let mut notes = vec![Note {
-        pitch: 60,
-        start_time_ns: 0,
-        length: NoteLength::from_4th_note(100),
-        language: Some("JPN".to_string()),
-        language_dependent_context: Some("p".to_string()),
-        phonemes: vec!["pau".to_string()],
-    }];
-    let mut current_group_key: Option<String> = None;
-
-    for label in labels {
-        let group_key = label
-            .curr_syllable
-            .note_position_forward
-            .as_option()
-            .map(ToString::to_string)
-            .unwrap_or_else(|| format!("g{}", notes.len()));
-
-        if current_group_key.as_deref() != Some(group_key.as_str()) {
-            let pitch_label = label.curr_note.absolute_pitch.as_option();
-            let pitch = match pitch_label {
-                Some(p) => {
-                    note_name_to_midi(p).ok_or_else(|| ComposeError::InvalidPitch(p.to_string()))?
-                }
-                None => 60,
-            };
-            let start_time = notes
-                .last()
-                .map(|prev| {
-                    prev.start_time_ns
-                        .saturating_add(length_triplet_32nd_to_nanoseconds(
-                            prev.length.into(),
-                            tempo,
-                        ))
-                })
-                .unwrap_or(0);
-
-            notes.push(Note {
-                pitch,
-                start_time_ns: start_time,
-                length: label
-                    .curr_note
-                    .length_triplet_32nd
-                    .as_option()
-                    .and_then(|v| v.parse::<i32>().ok())
-                    .map(NoteLength::from_32nd_triplet_note)
-                    .unwrap_or(NoteLength::from_32nd_triplet_note(1)),
-                phonemes: Vec::new(),
-                language: label
-                    .curr_syllable
-                    .language
-                    .as_option()
-                    .map(ToString::to_string),
-                language_dependent_context: label
-                    .curr_syllable
-                    .language_dependent_context
-                    .as_option()
-                    .map(ToString::to_string),
-            });
-            current_group_key = Some(group_key);
-        }
-
-        if let Some(last) = notes.last_mut() {
-            if let Some(p) = label.phoneme.phoneme_id_current.as_option() {
-                last.phonemes.push(p.to_string());
-            }
-        }
-    }
-    notes.push(Note {
-        pitch: 60,
-        start_time_ns: notes
-            .last()
-            .map(|prev| {
-                prev.start_time_ns
-                    .saturating_add(length_triplet_32nd_to_nanoseconds(
-                        prev.length.into(),
-                        tempo,
-                    ))
-            })
-            .unwrap_or(0),
-        language_dependent_context: Some("p".to_string()),
-        phonemes: vec!["pau".to_string()],
-        language: Some("JPN".to_string()),
-        length: NoteLength::from_4th_note(100),
-    });
-
-    Ok(Score {
-        notes,
-        tempo,
-        time_signatures: vec![time_signature],
-    })
 }
 
 #[derive(Debug, Clone)]
@@ -530,7 +395,12 @@ fn fill_note_contexts(
     label.curr_note.pitch_difference_from_previous_note = XX.into();
     label.curr_note.pitch_difference_to_next_note = notes
         .get(note_index + 1)
-        .map(|next_note| format_pitch_difference(notes[note_index].pitch, next_note.pitch).into())
+        .and_then(|next_note| {
+            notes[note_index]
+                .pitch
+                .zip(next_note.pitch)
+                .map(|(current, next)| format_pitch_difference(current, next).into())
+        })
         .unwrap_or_else(|| XX.into());
     label.curr_note.reserved_2 = XX.into();
     label.curr_note.reserved_3 = XX.into();
@@ -599,8 +469,13 @@ fn fill_note(
 ) {
     if let Some(i) = idx {
         let length_triplet_32nd_value: i32 = notes[i].length.into();
-        *absolute_pitch = midi_to_note_name(notes[i].pitch).into();
-        *relative_pitch = notes[i].pitch.rem_euclid(12).to_string().into();
+        if let Some(pitch) = notes[i].pitch {
+            *absolute_pitch = midi_to_note_name(pitch).into();
+            *relative_pitch = pitch.rem_euclid(12).to_string().into();
+        } else {
+            *absolute_pitch = XX.into();
+            *relative_pitch = XX.into();
+        }
         *key_signature = options.key_signature.clone().into();
         *beat = options.beat.clone().into();
         *tempo = options.tempo.to_string().into();
@@ -744,7 +619,7 @@ mod tests {
         let score = Score {
             notes: vec![
                 Note {
-                    pitch: 60,
+                    pitch: None,
                     start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["pau".to_string()],
@@ -752,7 +627,7 @@ mod tests {
                     language_dependent_context: Some("0".to_string()),
                 },
                 Note {
-                    pitch: 60,
+                    pitch: Some(60),
                     start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["p".to_string(), "a".to_string()],
@@ -760,7 +635,7 @@ mod tests {
                     language_dependent_context: Some("0".to_string()),
                 },
                 Note {
-                    pitch: 60,
+                    pitch: None,
                     start_time_ns: 0,
                     length: NoteLength::from_4th_note(1),
                     phonemes: vec!["pau".to_string()],
@@ -777,18 +652,28 @@ mod tests {
         let labels = compose_labels_from_score(&score).expect("compose should succeed");
         assert_eq!(labels.len(), 4);
         assert_eq!(
-            labels[0].phoneme.phoneme_id_current.as_option(),
+            labels[0].label.phoneme.phoneme_id_current.as_option(),
             Some("pau")
         );
-        assert_eq!(labels[1].phoneme.phoneme_id_current.as_option(), Some("p"));
-        assert_eq!(labels[2].phoneme.phoneme_id_current.as_option(), Some("a"));
         assert_eq!(
-            labels[3].phoneme.phoneme_id_current.as_option(),
+            labels[1].label.phoneme.phoneme_id_current.as_option(),
+            Some("p")
+        );
+        assert_eq!(
+            labels[2].label.phoneme.phoneme_id_current.as_option(),
+            Some("a")
+        );
+        assert_eq!(
+            labels[3].label.phoneme.phoneme_id_current.as_option(),
             Some("pau")
         );
-        assert_eq!(labels[0].curr_syllable.language.as_option(), Some("JPN"));
+        assert_eq!(
+            labels[0].label.curr_syllable.language.as_option(),
+            Some("JPN")
+        );
         assert_eq!(
             labels[0]
+                .label
                 .curr_syllable
                 .language_dependent_context
                 .as_option(),
@@ -796,54 +681,6 @@ mod tests {
         );
 
         insta::assert_debug_snapshot!(labels);
-    }
-
-    #[test]
-    fn labels_to_score_roundtrip() {
-        let score = Score {
-            notes: vec![
-                Note {
-                    pitch: 60,
-                    start_time_ns: 0,
-                    length: NoteLength::from_4th_note(1),
-                    phonemes: vec!["p".to_string(), "a".to_string()],
-                    language: Some("JPN".to_string()),
-                    language_dependent_context: Some("0".to_string()),
-                },
-                Note {
-                    pitch: 62,
-                    start_time_ns: 0,
-                    length: NoteLength::from_4th_note(1),
-                    phonemes: vec!["r".to_string()],
-                    language: Some("JPN".to_string()),
-                    language_dependent_context: Some("0".to_string()),
-                },
-            ],
-            tempo: 140.0,
-            time_signatures: vec![TimeSignature {
-                numerator: 3,
-                denominator: 4,
-            }],
-        };
-
-        let labels = compose_labels_from_score(&score).expect("compose should succeed");
-        let plain_labels: Vec<Label> = labels.iter().map(|l| l.label.clone()).collect();
-        let recovered = labels_to_score(&plain_labels).expect("recover should succeed");
-
-        assert_eq!(recovered.tempo, 140.0);
-        assert_eq!(
-            recovered.time_signatures,
-            vec![TimeSignature {
-                numerator: 3,
-                denominator: 4
-            }]
-        );
-        assert_eq!(recovered.notes.len(), 2);
-        assert_eq!(
-            recovered.notes[0].phonemes,
-            vec!["p".to_string(), "a".to_string()]
-        );
-        assert_eq!(recovered.notes[1].phonemes, vec!["r".to_string()]);
     }
 
     #[test]
