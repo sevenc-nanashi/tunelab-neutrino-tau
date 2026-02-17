@@ -115,27 +115,17 @@ impl Engine {
             tunelab_start_in_synthesis_time,
         );
 
-        let f0_values = self.synthesize_f0(&payload.voice_id, &score, &merged_phonemes)?;
-
-        let f32_file = std::fs::File::create("z:/f0_values.f32")?;
-        let mut buf_writer = std::io::BufWriter::new(f32_file);
-        for &f0 in &f0_values {
-            buf_writer.write_all(&f0.to_le_bytes())?;
-        }
-        buf_writer.flush()?;
+        let style_score = Self::transpose_score_pitches(&score, payload.style_shift);
+        let inferred_f0_values =
+            self.synthesize_f0(&payload.voice_id, &style_score, &merged_phonemes)?;
+        // Infer f0 on style-shifted notes, then shift f0 back to the original key.
+        let f0_values = Self::shift_f0_by_semitones(&inferred_f0_values, -payload.style_shift);
 
         let mapped_f0_values = Self::apply_payload_pitch_to_f0(
             &payload.pitch,
             &f0_values,
             tunelab_start_in_synthesis_time,
         );
-
-        let f32_file = std::fs::File::create("z:/mapped_f0_values.f32")?;
-        let mut buf_writer = std::io::BufWriter::new(f32_file);
-        for &f0 in &mapped_f0_values {
-            buf_writer.write_all(&f0.to_le_bytes())?;
-        }
-        buf_writer.flush()?;
 
         let wav_data = self.synthesize_waveform(
             &payload.voice_id,
@@ -153,6 +143,45 @@ impl Engine {
         );
 
         Ok(serde_json::to_string(&response)?)
+    }
+
+    fn transpose_score_pitches(
+        score: &crate::neutrino_score::Score,
+        semitones: f64,
+    ) -> crate::neutrino_score::Score {
+        if !semitones.is_finite() || semitones.abs() < f64::EPSILON {
+            return score.clone();
+        }
+        let delta = semitones.round() as i32;
+        if delta == 0 {
+            return score.clone();
+        }
+
+        let mut transposed = score.clone();
+        for note in &mut transposed.notes {
+            note.pitch = note.pitch.map(|p| {
+                let shifted = (p as i32 + delta).clamp(0, 127);
+                shifted as u8
+            });
+        }
+        transposed
+    }
+
+    fn shift_f0_by_semitones(f0_values: &[f32], semitones: f64) -> Vec<f32> {
+        if !semitones.is_finite() || semitones.abs() < f64::EPSILON {
+            return f0_values.to_vec();
+        }
+        let ratio = 2.0_f32.powf((semitones as f32) / 12.0);
+        f0_values
+            .iter()
+            .map(|&f0| {
+                if f0.is_finite() && f0 > 0.0 {
+                    f0 * ratio
+                } else {
+                    f0
+                }
+            })
+            .collect()
     }
 
     fn prepare_synthesis_input(

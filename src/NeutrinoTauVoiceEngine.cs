@@ -157,7 +157,10 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
     }
 
     private static readonly OrderedMap<string, AutomationConfig> AutomationConfigMap = new();
-    private static readonly OrderedMap<string, IPropertyConfig> PartPropertyMap = new();
+    private static readonly OrderedMap<string, IPropertyConfig> PartPropertyMap = new()
+    {
+        { "styleShift", new NumberConfig(0.0, -24.0, 24.0, true) },
+    };
     private static readonly OrderedMap<string, IPropertyConfig> NotePropertyMap = new();
     private sealed class NativeVoiceSource
     {

@@ -48,6 +48,13 @@ impl NoteLength {
     pub fn from_32nd_triplet_note_float(count: f64) -> Self {
         Self(count.round() as i32)
     }
+    pub fn from_seconds_float(seconds: f64, tempo: f64) -> Self {
+        if tempo <= 0.0 {
+            return Self(0);
+        }
+        // length = seconds / (60 / tempo) * 24 = seconds * tempo * 24 / 60
+        Self((seconds * tempo * 24.0 / 60.0).round() as i32)
+    }
 
     pub fn to_nanoseconds(self, tempo: f64) -> u64 {
         length_triplet_32nd_to_nanoseconds(self.0, tempo)
@@ -119,7 +126,6 @@ impl Default for Score {
 pub enum ComposeError {
     TemplateParse(String),
     EmptyPhonemes { note_index: usize },
-    InvalidPitch(String),
 }
 
 impl std::fmt::Display for ComposeError {
@@ -129,20 +135,11 @@ impl std::fmt::Display for ComposeError {
             Self::EmptyPhonemes { note_index } => {
                 write!(f, "note at index {note_index} has no phonemes")
             }
-            Self::InvalidPitch(p) => write!(f, "invalid pitch label: {p}"),
         }
     }
 }
 
 impl std::error::Error for ComposeError {}
-
-pub fn xx_as_none(value: &str) -> Option<&str> {
-    if value == XX {
-        None
-    } else {
-        Some(value)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimedLabel {
@@ -549,70 +546,9 @@ fn midi_to_note_name(pitch: u8) -> String {
     format!("{}{}", NOTE_NAMES[pc], octave)
 }
 
-fn note_name_to_midi(name: &str) -> Option<u8> {
-    if name.len() < 2 {
-        return None;
-    }
-
-    let (head, octave_str) =
-        if name.as_bytes().get(1) == Some(&b'#') || name.as_bytes().get(1) == Some(&b'b') {
-            (&name[..2], &name[2..])
-        } else {
-            (&name[..1], &name[1..])
-        };
-
-    let pitch_class = match head {
-        "C" => 0,
-        "C#" => 1,
-        "Db" => 1,
-        "D" => 2,
-        "D#" => 3,
-        "Eb" => 3,
-        "E" => 4,
-        "F" => 5,
-        "F#" => 6,
-        "Gb" => 6,
-        "G" => 7,
-        "G#" => 8,
-        "Ab" => 8,
-        "A" => 9,
-        "A#" => 10,
-        "Bb" => 10,
-        "B" => 11,
-        _ => return None,
-    };
-
-    let octave = octave_str.parse::<i32>().ok()?;
-    let midi = (octave + 1) * 12 + pitch_class;
-    if !(0..=127).contains(&midi) {
-        None
-    } else {
-        Some(midi as u8)
-    }
-}
-
-fn parse_time_signature(value: &str) -> Option<TimeSignature> {
-    let (num, den) = value.split_once('/')?;
-    let numerator = num.parse::<u8>().ok()?;
-    let denominator = den.parse::<u8>().ok()?;
-    if numerator == 0 || denominator == 0 {
-        return None;
-    }
-    Some(TimeSignature {
-        numerator,
-        denominator,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn xx_is_treated_as_none() {
-        assert_eq!(xx_as_none("xx"), None);
-        assert_eq!(xx_as_none("0"), Some("0"));
-    }
 
     #[test]
     fn score_to_labels() {

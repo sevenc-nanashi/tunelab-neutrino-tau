@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -115,6 +116,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       StartTime = _startTime,
       EndTime = _endTime,
       Duration = Math.Max(0.0, _endTime - _startTime),
+      StyleShift = ResolveStyleShift(_data.PartProperties),
       PartProperties = ConvertPropertyObject(_data.PartProperties),
       Notes = notePayloads,
       Pitch = new PitchPayload
@@ -215,12 +217,50 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     return value.ToString();
   }
 
+  private static double ResolveStyleShift(PropertyObject partProperties)
+  {
+    foreach (var kv in partProperties.Map)
+    {
+      var key = kv.Key?.ToString();
+      if (string.IsNullOrWhiteSpace(key))
+      {
+        continue;
+      }
+
+      var normalized = key
+        .Replace("_", string.Empty, StringComparison.Ordinal)
+        .Replace(" ", string.Empty, StringComparison.Ordinal)
+        .Replace("-", string.Empty, StringComparison.Ordinal)
+        .ToLowerInvariant();
+      if (normalized != "styleshift")
+      {
+        continue;
+      }
+
+      var value = kv.Value;
+      if (value.ToDouble(out var d) && double.IsFinite(d))
+      {
+        return Math.Round(d, MidpointRounding.AwayFromZero);
+      }
+
+      if (value.ToString(out var s)
+          && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+          && double.IsFinite(parsed))
+      {
+        return Math.Round(parsed, MidpointRounding.AwayFromZero);
+      }
+    }
+
+    return 0.0;
+  }
+
   private sealed class SynthesisTaskPayload
   {
     public string VoiceId { get; init; } = string.Empty;
     public double StartTime { get; init; }
     public double EndTime { get; init; }
     public double Duration { get; init; }
+    public double StyleShift { get; init; }
     public Dictionary<string, object?> PartProperties { get; init; } = [];
     public List<SynthesisNotePayload> Notes { get; init; } = [];
     public PitchPayload Pitch { get; init; } = new();
