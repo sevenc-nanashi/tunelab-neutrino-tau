@@ -146,9 +146,11 @@ impl Engine {
             tunelab_start_in_synthesis_time,
         );
 
+        let waveform_score =
+            Self::transpose_score_pitches(&style_score, payload.waveform_style_shift);
         let wav_data = self.synthesize_waveform(
             &payload.voice_id,
-            &score,
+            &waveform_score,
             &merged_phonemes,
             &mapped_f0_values,
         )?;

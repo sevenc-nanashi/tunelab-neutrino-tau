@@ -116,7 +116,8 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       StartTime = _startTime,
       EndTime = _endTime,
       Duration = Math.Max(0.0, _endTime - _startTime),
-      StyleShift = ResolveStyleShift(_data.PartProperties),
+      StyleShift = ResolveNumericPartProperty(_data.PartProperties, "styleshift"),
+      WaveformStyleShift = ResolveNumericPartProperty(_data.PartProperties, "waveformstyleshift"),
       PartProperties = ConvertPropertyObject(_data.PartProperties),
       Notes = notePayloads,
       Pitch = new PitchPayload
@@ -217,7 +218,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     return value.ToString();
   }
 
-  private static double ResolveStyleShift(PropertyObject partProperties)
+  private static double ResolveNumericPartProperty(PropertyObject partProperties, string normalizedTargetKey)
   {
     foreach (var kv in partProperties.Map)
     {
@@ -232,7 +233,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
         .Replace(" ", string.Empty, StringComparison.Ordinal)
         .Replace("-", string.Empty, StringComparison.Ordinal)
         .ToLowerInvariant();
-      if (normalized != "styleshift")
+      if (normalized != normalizedTargetKey)
       {
         continue;
       }
@@ -261,6 +262,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     public double EndTime { get; init; }
     public double Duration { get; init; }
     public double StyleShift { get; init; }
+    public double WaveformStyleShift { get; init; }
     public Dictionary<string, object?> PartProperties { get; init; } = [];
     public List<SynthesisNotePayload> Notes { get; init; } = [];
     public PitchPayload Pitch { get; init; } = new();
