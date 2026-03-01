@@ -24,6 +24,7 @@ task :pack do
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)
 
   begin
+    sh "cargo build"
     sh "dotnet build \"#{project_file}\" -c Release"
 
     mkdir_p artifacts_dir
