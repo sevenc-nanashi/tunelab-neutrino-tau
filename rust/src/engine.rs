@@ -370,11 +370,21 @@ impl Engine {
             }
         }
 
+        let mono_samples = if wav_data.0.channels == 1 {
+            wav_data.1
+        } else {
+            wav_data
+                .1
+                .chunks_exact(wav_data.0.channels as usize)
+                .map(|frame| frame.iter().sum::<f32>() / (wav_data.0.channels as f32))
+                .collect()
+        };
+
         crate::synthesizer::SynthesisResponse {
             start_time: -tunelab_start_in_synthesis_time,
             sample_rate: wav_data.0.sample_rate as _,
-            sample_count: wav_data.1.len() as _,
-            samples: wav_data.1,
+            sample_count: mono_samples.len() as _,
+            samples: mono_samples,
             pitch_times: pitch_times
                 .iter()
                 .zip(skipped_pitches.iter())

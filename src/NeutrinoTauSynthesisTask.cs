@@ -1,17 +1,10 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using NeutrinoTau.Native;
 using TuneLab.Base.Properties;
 using TuneLab.Base.Structures;
-using TuneLab.Base.Utils;
 using TuneLab.Extensions.Voices;
 
 namespace NeutrinoTau;
@@ -32,7 +25,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     _data = data;
     _nativeEngine = nativeEngine;
     _voiceId = voiceId ?? string.Empty;
-    _notes = data.Notes.ToList();
+    _notes = [.. data.Notes];
     if (_notes.Count == 0)
     {
       _startTime = 0.0;
@@ -58,11 +51,11 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       _cancellationTokenSource = new CancellationTokenSource();
       if (_nativeCancelToken != null)
       {
-        NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
+        Native.NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
         _nativeCancelToken = null;
       }
 
-      _nativeCancelToken = NativeMethods.neutrino_tau_create_cancel_token();
+      _nativeCancelToken = Native.NativeMethods.neutrino_tau_create_cancel_token();
       if (_nativeCancelToken == null)
       {
         _cancellationTokenSource.Dispose();
@@ -92,7 +85,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       _cancellationTokenSource?.Cancel();
       if (_nativeCancelToken != null)
       {
-        NativeMethods.neutrino_tau_cancel_token_cancel(_nativeCancelToken);
+        Native.NativeMethods.neutrino_tau_cancel_token_cancel(_nativeCancelToken);
       }
     }
   }
@@ -119,12 +112,12 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       LastIndex = ResolveNeighborIndex(note.Last, noteIndexMap),
       NextIndex = ResolveNeighborIndex(note.Next, noteIndexMap),
       Properties = ConvertPropertyObject(note.Properties),
-      Phonemes = note.Phonemes.Select(phoneme => new SynthesisPhonemePayload
+      Phonemes = [.. note.Phonemes.Select(phoneme => new SynthesisPhonemePayload
       {
         Symbol = phoneme.Symbol,
         StartTime = phoneme.StartTime,
         EndTime = phoneme.EndTime,
-      }).ToList(),
+      })],
     }).ToList();
 
     var pitchTimes = CollectPitchTimes(_startTime, _endTime);
@@ -361,7 +354,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
   private Task? _runningTask;
   private Native.CancelToken* _nativeCancelToken;
 
-  private unsafe void RunSynthesis(CancellationToken token, Native.CancelToken* nativeCancelToken)
+  private void RunSynthesis(CancellationToken token, Native.CancelToken* nativeCancelToken)
   {
     try
     {
@@ -380,7 +373,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       {
         fixed (byte* payloadPtr = payloadBytes)
         {
-          resultPtr = NativeMethods.neutrino_tau_synthesize(_nativeEngine, payloadPtr, nativeCancelToken, &errorPtr);
+          resultPtr = Native.NativeMethods.neutrino_tau_synthesize(_nativeEngine, payloadPtr, nativeCancelToken, &errorPtr);
         }
 
         token.ThrowIfCancellationRequested();
@@ -397,12 +390,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
           throw new InvalidOperationException("Native synthesis response is empty.");
         }
 
-        var response = JsonSerializer.Deserialize<SynthesisResponse>(resultJson, JsonOptions);
-        if (response == null)
-        {
-          throw new InvalidOperationException("Failed to parse native synthesis response.");
-        }
-
+        var response = JsonSerializer.Deserialize<SynthesisResponse>(resultJson, JsonOptions) ?? throw new InvalidOperationException("Failed to parse native synthesis response.");
         token.ThrowIfCancellationRequested();
 
         var samples = response.Samples.Length > 0 ? response.Samples : new float[Math.Max(0, response.SampleCount)];
@@ -415,11 +403,11 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       {
         if (resultPtr != null)
         {
-          NativeMethods.neutrino_tau_free_c_string(resultPtr);
+          Native.NativeMethods.neutrino_tau_free_c_string(resultPtr);
         }
         if (errorPtr != null)
         {
-          NativeMethods.neutrino_tau_free_c_string(errorPtr);
+          Native.NativeMethods.neutrino_tau_free_c_string(errorPtr);
         }
       }
     }
@@ -440,7 +428,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       {
         if (_nativeCancelToken == nativeCancelToken)
         {
-          NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
+          Native.NativeMethods.neutrino_tau_destroy_cancel_token(_nativeCancelToken);
           _nativeCancelToken = null;
         }
       }
