@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Set release version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $description = Get-Content -LiteralPath "description.json" -Raw | ConvertFrom-Json
+          $description.version = $version
+          $description | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "description.json" -Encoding utf8
+
+      - name: Pack extension
+        shell: pwsh
+        env:
+          PACKAGE_NAME: tunelab-neutrino-tau-${{ inputs.version }}
+        run: rake pack
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tunelab-neutrino-tau-${{ inputs.version }}
+          path: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          generate_release_notes: true
