@@ -145,6 +145,8 @@ impl Engine {
             &f0_values,
             tunelab_start_in_synthesis_time,
         );
+        let shifted_mapped_f0_values =
+            Self::shift_f0_by_cents(&mapped_f0_values, payload.pitch_shift_cents);
 
         let waveform_score =
             Self::transpose_score_pitches(&style_score, payload.waveform_style_shift);
@@ -152,11 +154,11 @@ impl Engine {
             &payload.voice_id,
             &waveform_score,
             &merged_phonemes,
-            &mapped_f0_values,
+            &shifted_mapped_f0_values,
         )?;
         let response = Self::build_synthesis_response(
             &payload,
-            &f0_values,
+            &shifted_mapped_f0_values,
             &mapped_phoneme_groups,
             &merged_phonemes,
             wav_data,
@@ -203,6 +205,13 @@ impl Engine {
                 }
             })
             .collect()
+    }
+
+    fn shift_f0_by_cents(f0_values: &[f32], cents: f64) -> Vec<f32> {
+        if !cents.is_finite() || cents.abs() < f64::EPSILON {
+            return f0_values.to_vec();
+        }
+        Self::shift_f0_by_semitones(f0_values, cents / 100.0)
     }
 
     fn prepare_synthesis_input(

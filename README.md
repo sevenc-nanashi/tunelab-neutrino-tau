@@ -33,3 +33,12 @@ Neutrino Tau for TuneLab は [TuneLab](https://github.com/LiuYunPlayer/TuneLab) 
 
 `waveformStyleShift` は最終波形合成にのみ追加で適用される半音シフトです。  
 `styleShift` に重ねて波形段でだけシフト量を調整できます。
+
+### `pitchShiftCents`
+
+- 型: number
+- 既定値: `0`
+- 範囲: `-2400` 〜 `2400` (cent)
+
+`pitchShiftCents` は最終的な F0 にセント単位で適用されるピッチシフトです。  
+`styleShift` / `waveformStyleShift` とは独立して、微細なキー調整に使えます。

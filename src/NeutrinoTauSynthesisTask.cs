@@ -131,6 +131,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       Duration = Math.Max(0.0, _endTime - _startTime),
       StyleShift = ResolveNumericPartProperty(_data.PartProperties, "styleshift"),
       WaveformStyleShift = ResolveNumericPartProperty(_data.PartProperties, "waveformstyleshift"),
+      PitchShiftCents = ResolveNumericPartProperty(_data.PartProperties, "pitchshiftcents", roundToInteger: false),
       PartProperties = ConvertPropertyObject(_data.PartProperties),
       Notes = notePayloads,
       Pitch = new PitchPayload
@@ -231,7 +232,10 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     return value.ToString();
   }
 
-  private static double ResolveNumericPartProperty(PropertyObject partProperties, string normalizedTargetKey)
+  private static double ResolveNumericPartProperty(
+    PropertyObject partProperties,
+    string normalizedTargetKey,
+    bool roundToInteger = true)
   {
     foreach (var kv in partProperties.Map)
     {
@@ -254,14 +258,14 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
       var value = kv.Value;
       if (value.ToDouble(out var d) && double.IsFinite(d))
       {
-        return Math.Round(d, MidpointRounding.AwayFromZero);
+        return roundToInteger ? Math.Round(d, MidpointRounding.AwayFromZero) : d;
       }
 
       if (value.ToString(out var s)
           && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
           && double.IsFinite(parsed))
       {
-        return Math.Round(parsed, MidpointRounding.AwayFromZero);
+        return roundToInteger ? Math.Round(parsed, MidpointRounding.AwayFromZero) : parsed;
       }
     }
 
@@ -276,6 +280,7 @@ public unsafe sealed class NeutrinoTauSynthesisTask : ISynthesisTask
     public double Duration { get; init; }
     public double StyleShift { get; init; }
     public double WaveformStyleShift { get; init; }
+    public double PitchShiftCents { get; init; }
     public Dictionary<string, object?> PartProperties { get; init; } = [];
     public List<SynthesisNotePayload> Notes { get; init; } = [];
     public PitchPayload Pitch { get; init; } = new();

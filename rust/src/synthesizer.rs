@@ -12,6 +12,8 @@ pub struct SynthesisTaskPayload {
     pub style_shift: f64,
     #[serde(default)]
     pub waveform_style_shift: f64,
+    #[serde(default)]
+    pub pitch_shift_cents: f64,
     pub part_properties: std::collections::HashMap<String, serde_json::Value>,
     pub notes: Vec<SynthesisNotePayload>,
     pub pitch: PitchPayload,

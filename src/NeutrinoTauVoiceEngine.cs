@@ -154,6 +154,7 @@ public unsafe class NeutrinoTauVoiceEngine : IVoiceEngine
     {
         { "styleShift", new NumberConfig(0.0, -24.0, 24.0, true) },
         { "waveformStyleShift", new NumberConfig(0.0, -24.0, 24.0, true) },
+        { "pitchShiftCents", new NumberConfig(0.0, -2400.0, 2400.0, true) },
     };
   private static readonly OrderedMap<string, IPropertyConfig> NotePropertyMap = [];
   private sealed class NativeVoiceSource
