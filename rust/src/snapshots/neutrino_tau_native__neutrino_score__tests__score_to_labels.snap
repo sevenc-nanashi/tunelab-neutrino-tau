@@ -1,574 +1,1014 @@
 ---
-source: src/neutrino_score.rs
+source: rust/src/neutrino_score.rs
 expression: labels
 ---
 [
-    Label {
-        phoneme: PhonemeContext {
-            language_independent_phoneme_id: "pau",
-            phoneme_id_two_before: "xx",
-            phoneme_id_previous: "xx",
-            phoneme_id_current: "pau",
-            phoneme_id_next: "p",
-            phoneme_id_two_after: "a",
-            phoneme_flag_two_before: "xx",
-            phoneme_flag_before: "xx",
-            phoneme_flag_current: "00",
-            phoneme_flag_next: "00",
-            phoneme_flag_two_after: "00",
-            syllable_phoneme_position_forward: "1",
-            syllable_phoneme_position_backward: "1",
-            distance_from_prev_vowel: "xx",
-            distance_to_next_vowel: "xx",
-            reserved: "xx",
+    TimedLabel {
+        label: Label {
+            phoneme: PhonemeContext {
+                language_independent_phoneme_id: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_two_before: LabelValue::None,
+                phoneme_id_previous: LabelValue::None,
+                phoneme_id_current: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_next: LabelValue::Some(
+                    "p",
+                ),
+                phoneme_id_two_after: LabelValue::Some(
+                    "a",
+                ),
+                phoneme_flag_two_before: LabelValue::None,
+                phoneme_flag_before: LabelValue::None,
+                phoneme_flag_current: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_next: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_two_after: LabelValue::Some(
+                    "00",
+                ),
+                syllable_phoneme_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                syllable_phoneme_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                distance_from_prev_vowel: LabelValue::None,
+                distance_to_next_vowel: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            prev_syllable: PrevSyllable {
+                phoneme_count: LabelValue::None,
+                note_position_forward: LabelValue::None,
+                note_position_backward: LabelValue::None,
+                language: LabelValue::None,
+                language_dependent_context: LabelValue::None,
+            },
+            curr_syllable: CurrSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "3",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            next_syllable: NextSyllable {
+                phoneme_count: LabelValue::Some(
+                    "2",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "2",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "2",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            prev_note: PrevNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::None,
+                beat: LabelValue::None,
+                tempo: LabelValue::None,
+                length_syllable: LabelValue::None,
+                length_centisecond: LabelValue::None,
+                length_triplet_32nd: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            curr_note: CurrNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+                measure_note_position_note_forward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_note_backward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_centisecond_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_centisecond_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_backward: LabelValue::Some(
+                    "100",
+                ),
+                phrase_note_position_note_forward: LabelValue::None,
+                phrase_note_position_note_backward: LabelValue::None,
+                phrase_note_position_centisecond_forward: LabelValue::None,
+                phrase_note_position_centisecond_backward: LabelValue::None,
+                phrase_note_position_triplet_32nd_forward: LabelValue::None,
+                phrase_note_position_triplet_32nd_backward: LabelValue::None,
+                phrase_note_position_percent_forward: LabelValue::None,
+                phrase_note_position_percent_backward: LabelValue::None,
+                slur_with_previous: LabelValue::Some(
+                    "0",
+                ),
+                slur_with_next: LabelValue::Some(
+                    "0",
+                ),
+                dynamic_mark: LabelValue::Some(
+                    "n",
+                ),
+                distance_to_next_accent_note: LabelValue::None,
+                distance_to_previous_accent_note: LabelValue::None,
+                distance_to_next_accent_centisecond: LabelValue::None,
+                distance_to_previous_accent_centisecond: LabelValue::None,
+                distance_to_next_accent_triplet_32nd: LabelValue::None,
+                distance_to_previous_accent_triplet_32nd: LabelValue::None,
+                distance_to_next_staccato_note: LabelValue::None,
+                distance_to_previous_staccato_note: LabelValue::None,
+                distance_to_next_staccato_centisecond: LabelValue::None,
+                distance_to_previous_staccato_centisecond: LabelValue::None,
+                distance_to_next_staccato_triplet_32nd: LabelValue::None,
+                distance_to_previous_staccato_triplet_32nd: LabelValue::None,
+                crescendo_position_note_forward: LabelValue::None,
+                crescendo_position_note_backward: LabelValue::None,
+                crescendo_position_second_forward: LabelValue::None,
+                crescendo_position_second_backward: LabelValue::None,
+                crescendo_position_triplet_32nd_forward: LabelValue::None,
+                crescendo_position_triplet_32nd_backward: LabelValue::None,
+                crescendo_position_percent_forward: LabelValue::None,
+                crescendo_position_percent_backward: LabelValue::None,
+                decrescendo_position_note_forward: LabelValue::None,
+                decrescendo_position_note_backward: LabelValue::None,
+                decrescendo_position_second_forward: LabelValue::None,
+                decrescendo_position_second_backward: LabelValue::None,
+                decrescendo_position_triplet_32nd_forward: LabelValue::None,
+                decrescendo_position_triplet_32nd_backward: LabelValue::None,
+                decrescendo_position_percent_forward: LabelValue::None,
+                decrescendo_position_percent_backward: LabelValue::None,
+                pitch_difference_from_previous_note: LabelValue::None,
+                pitch_difference_to_next_note: LabelValue::None,
+                reserved_2: LabelValue::None,
+                reserved_3: LabelValue::None,
+            },
+            next_note: NextNote {
+                absolute_pitch: LabelValue::Some(
+                    "C4",
+                ),
+                relative_pitch: LabelValue::Some(
+                    "0",
+                ),
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            prev_phrase: PrevPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            curr_phrase: CurrPhrase {
+                syllable_count: LabelValue::Some(
+                    "3",
+                ),
+                phoneme_count: LabelValue::Some(
+                    "4",
+                ),
+            },
+            next_phrase: NextPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            song: SongContext {
+                syllable_per_measure: LabelValue::None,
+                phoneme_per_measure: LabelValue::None,
+                phrase_count: LabelValue::Some(
+                    "1",
+                ),
+            },
         },
-        prev_syllable: PrevSyllable {
-            phoneme_count: "xx",
-            note_position_forward: "xx",
-            note_position_backward: "xx",
-            language: "xx",
-            language_dependent_context: "xx",
-        },
-        curr_syllable: CurrSyllable {
-            phoneme_count: "1",
-            note_position_forward: "1",
-            note_position_backward: "3",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        next_syllable: NextSyllable {
-            phoneme_count: "2",
-            note_position_forward: "2",
-            note_position_backward: "2",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        prev_note: PrevNote {
-            absolute_pitch: "xx",
-            relative_pitch: "xx",
-            key_signature: "xx",
-            beat: "xx",
-            tempo: "xx",
-            length_syllable: "xx",
-            length_centisecond: "xx",
-            length_triplet_32nd: "xx",
-            reserved: "xx",
-        },
-        curr_note: CurrNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-            measure_note_position_note_forward: "1",
-            measure_note_position_note_backward: "1",
-            measure_note_position_centisecond_forward: "0",
-            measure_note_position_centisecond_backward: "0",
-            measure_note_position_triplet_32nd_forward: "0",
-            measure_note_position_triplet_32nd_backward: "0",
-            measure_note_position_percent_forward: "0",
-            measure_note_position_percent_backward: "100",
-            phrase_note_position_note_forward: "xx",
-            phrase_note_position_note_backward: "xx",
-            phrase_note_position_centisecond_forward: "xx",
-            phrase_note_position_centisecond_backward: "xx",
-            phrase_note_position_triplet_32nd_forward: "xx",
-            phrase_note_position_triplet_32nd_backward: "xx",
-            phrase_note_position_percent_forward: "xx",
-            phrase_note_position_percent_backward: "xx",
-            slur_with_previous: "0",
-            slur_with_next: "0",
-            dynamic_mark: "n",
-            distance_to_next_accent_note: "xx",
-            distance_to_previous_accent_note: "xx",
-            distance_to_next_accent_centisecond: "xx",
-            distance_to_previous_accent_centisecond: "xx",
-            distance_to_next_accent_triplet_32nd: "xx",
-            distance_to_previous_accent_triplet_32nd: "xx",
-            distance_to_next_staccato_note: "xx",
-            distance_to_previous_staccato_note: "xx",
-            distance_to_next_staccato_centisecond: "xx",
-            distance_to_previous_staccato_centisecond: "xx",
-            distance_to_next_staccato_triplet_32nd: "xx",
-            distance_to_previous_staccato_triplet_32nd: "xx",
-            crescendo_position_note_forward: "xx",
-            crescendo_position_note_backward: "xx",
-            crescendo_position_second_forward: "xx",
-            crescendo_position_second_backward: "xx",
-            crescendo_position_triplet_32nd_forward: "xx",
-            crescendo_position_triplet_32nd_backward: "xx",
-            crescendo_position_percent_forward: "xx",
-            crescendo_position_percent_backward: "xx",
-            decrescendo_position_note_forward: "xx",
-            decrescendo_position_note_backward: "xx",
-            decrescendo_position_second_forward: "xx",
-            decrescendo_position_second_backward: "xx",
-            decrescendo_position_triplet_32nd_forward: "xx",
-            decrescendo_position_triplet_32nd_backward: "xx",
-            decrescendo_position_percent_forward: "xx",
-            decrescendo_position_percent_backward: "xx",
-            pitch_difference_from_previous_note: "xx",
-            pitch_difference_to_next_note: "p0",
-            reserved_2: "xx",
-            reserved_3: "xx",
-        },
-        next_note: NextNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        prev_phrase: PrevPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        curr_phrase: CurrPhrase {
-            syllable_count: "3",
-            phoneme_count: "4",
-        },
-        next_phrase: NextPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        song: SongContext {
-            syllable_per_measure: "xx",
-            phoneme_per_measure: "xx",
-            phrase_count: "1",
-        },
+        start_time_ns: 0,
+        end_time_ns: 428571429,
     },
-    Label {
-        phoneme: PhonemeContext {
-            language_independent_phoneme_id: "p",
-            phoneme_id_two_before: "xx",
-            phoneme_id_previous: "pau",
-            phoneme_id_current: "p",
-            phoneme_id_next: "a",
-            phoneme_id_two_after: "pau",
-            phoneme_flag_two_before: "xx",
-            phoneme_flag_before: "xx",
-            phoneme_flag_current: "00",
-            phoneme_flag_next: "00",
-            phoneme_flag_two_after: "00",
-            syllable_phoneme_position_forward: "1",
-            syllable_phoneme_position_backward: "2",
-            distance_from_prev_vowel: "xx",
-            distance_to_next_vowel: "xx",
-            reserved: "xx",
+    TimedLabel {
+        label: Label {
+            phoneme: PhonemeContext {
+                language_independent_phoneme_id: LabelValue::Some(
+                    "p",
+                ),
+                phoneme_id_two_before: LabelValue::None,
+                phoneme_id_previous: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_current: LabelValue::Some(
+                    "p",
+                ),
+                phoneme_id_next: LabelValue::Some(
+                    "a",
+                ),
+                phoneme_id_two_after: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_flag_two_before: LabelValue::None,
+                phoneme_flag_before: LabelValue::None,
+                phoneme_flag_current: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_next: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_two_after: LabelValue::Some(
+                    "00",
+                ),
+                syllable_phoneme_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                syllable_phoneme_position_backward: LabelValue::Some(
+                    "2",
+                ),
+                distance_from_prev_vowel: LabelValue::None,
+                distance_to_next_vowel: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            prev_syllable: PrevSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "3",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            curr_syllable: CurrSyllable {
+                phoneme_count: LabelValue::Some(
+                    "2",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "2",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "2",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            next_syllable: NextSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "3",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            prev_note: PrevNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            curr_note: CurrNote {
+                absolute_pitch: LabelValue::Some(
+                    "C4",
+                ),
+                relative_pitch: LabelValue::Some(
+                    "0",
+                ),
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+                measure_note_position_note_forward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_note_backward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_centisecond_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_centisecond_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_backward: LabelValue::Some(
+                    "100",
+                ),
+                phrase_note_position_note_forward: LabelValue::None,
+                phrase_note_position_note_backward: LabelValue::None,
+                phrase_note_position_centisecond_forward: LabelValue::None,
+                phrase_note_position_centisecond_backward: LabelValue::None,
+                phrase_note_position_triplet_32nd_forward: LabelValue::None,
+                phrase_note_position_triplet_32nd_backward: LabelValue::None,
+                phrase_note_position_percent_forward: LabelValue::None,
+                phrase_note_position_percent_backward: LabelValue::None,
+                slur_with_previous: LabelValue::Some(
+                    "0",
+                ),
+                slur_with_next: LabelValue::Some(
+                    "0",
+                ),
+                dynamic_mark: LabelValue::Some(
+                    "n",
+                ),
+                distance_to_next_accent_note: LabelValue::None,
+                distance_to_previous_accent_note: LabelValue::None,
+                distance_to_next_accent_centisecond: LabelValue::None,
+                distance_to_previous_accent_centisecond: LabelValue::None,
+                distance_to_next_accent_triplet_32nd: LabelValue::None,
+                distance_to_previous_accent_triplet_32nd: LabelValue::None,
+                distance_to_next_staccato_note: LabelValue::None,
+                distance_to_previous_staccato_note: LabelValue::None,
+                distance_to_next_staccato_centisecond: LabelValue::None,
+                distance_to_previous_staccato_centisecond: LabelValue::None,
+                distance_to_next_staccato_triplet_32nd: LabelValue::None,
+                distance_to_previous_staccato_triplet_32nd: LabelValue::None,
+                crescendo_position_note_forward: LabelValue::None,
+                crescendo_position_note_backward: LabelValue::None,
+                crescendo_position_second_forward: LabelValue::None,
+                crescendo_position_second_backward: LabelValue::None,
+                crescendo_position_triplet_32nd_forward: LabelValue::None,
+                crescendo_position_triplet_32nd_backward: LabelValue::None,
+                crescendo_position_percent_forward: LabelValue::None,
+                crescendo_position_percent_backward: LabelValue::None,
+                decrescendo_position_note_forward: LabelValue::None,
+                decrescendo_position_note_backward: LabelValue::None,
+                decrescendo_position_second_forward: LabelValue::None,
+                decrescendo_position_second_backward: LabelValue::None,
+                decrescendo_position_triplet_32nd_forward: LabelValue::None,
+                decrescendo_position_triplet_32nd_backward: LabelValue::None,
+                decrescendo_position_percent_forward: LabelValue::None,
+                decrescendo_position_percent_backward: LabelValue::None,
+                pitch_difference_from_previous_note: LabelValue::None,
+                pitch_difference_to_next_note: LabelValue::None,
+                reserved_2: LabelValue::None,
+                reserved_3: LabelValue::None,
+            },
+            next_note: NextNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            prev_phrase: PrevPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            curr_phrase: CurrPhrase {
+                syllable_count: LabelValue::Some(
+                    "3",
+                ),
+                phoneme_count: LabelValue::Some(
+                    "4",
+                ),
+            },
+            next_phrase: NextPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            song: SongContext {
+                syllable_per_measure: LabelValue::None,
+                phoneme_per_measure: LabelValue::None,
+                phrase_count: LabelValue::Some(
+                    "1",
+                ),
+            },
         },
-        prev_syllable: PrevSyllable {
-            phoneme_count: "1",
-            note_position_forward: "1",
-            note_position_backward: "3",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        curr_syllable: CurrSyllable {
-            phoneme_count: "2",
-            note_position_forward: "2",
-            note_position_backward: "2",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        next_syllable: NextSyllable {
-            phoneme_count: "1",
-            note_position_forward: "3",
-            note_position_backward: "1",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        prev_note: PrevNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        curr_note: CurrNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-            measure_note_position_note_forward: "1",
-            measure_note_position_note_backward: "1",
-            measure_note_position_centisecond_forward: "0",
-            measure_note_position_centisecond_backward: "0",
-            measure_note_position_triplet_32nd_forward: "0",
-            measure_note_position_triplet_32nd_backward: "0",
-            measure_note_position_percent_forward: "0",
-            measure_note_position_percent_backward: "100",
-            phrase_note_position_note_forward: "xx",
-            phrase_note_position_note_backward: "xx",
-            phrase_note_position_centisecond_forward: "xx",
-            phrase_note_position_centisecond_backward: "xx",
-            phrase_note_position_triplet_32nd_forward: "xx",
-            phrase_note_position_triplet_32nd_backward: "xx",
-            phrase_note_position_percent_forward: "xx",
-            phrase_note_position_percent_backward: "xx",
-            slur_with_previous: "0",
-            slur_with_next: "0",
-            dynamic_mark: "n",
-            distance_to_next_accent_note: "xx",
-            distance_to_previous_accent_note: "xx",
-            distance_to_next_accent_centisecond: "xx",
-            distance_to_previous_accent_centisecond: "xx",
-            distance_to_next_accent_triplet_32nd: "xx",
-            distance_to_previous_accent_triplet_32nd: "xx",
-            distance_to_next_staccato_note: "xx",
-            distance_to_previous_staccato_note: "xx",
-            distance_to_next_staccato_centisecond: "xx",
-            distance_to_previous_staccato_centisecond: "xx",
-            distance_to_next_staccato_triplet_32nd: "xx",
-            distance_to_previous_staccato_triplet_32nd: "xx",
-            crescendo_position_note_forward: "xx",
-            crescendo_position_note_backward: "xx",
-            crescendo_position_second_forward: "xx",
-            crescendo_position_second_backward: "xx",
-            crescendo_position_triplet_32nd_forward: "xx",
-            crescendo_position_triplet_32nd_backward: "xx",
-            crescendo_position_percent_forward: "xx",
-            crescendo_position_percent_backward: "xx",
-            decrescendo_position_note_forward: "xx",
-            decrescendo_position_note_backward: "xx",
-            decrescendo_position_second_forward: "xx",
-            decrescendo_position_second_backward: "xx",
-            decrescendo_position_triplet_32nd_forward: "xx",
-            decrescendo_position_triplet_32nd_backward: "xx",
-            decrescendo_position_percent_forward: "xx",
-            decrescendo_position_percent_backward: "xx",
-            pitch_difference_from_previous_note: "xx",
-            pitch_difference_to_next_note: "p0",
-            reserved_2: "xx",
-            reserved_3: "xx",
-        },
-        next_note: NextNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        prev_phrase: PrevPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        curr_phrase: CurrPhrase {
-            syllable_count: "3",
-            phoneme_count: "4",
-        },
-        next_phrase: NextPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        song: SongContext {
-            syllable_per_measure: "xx",
-            phoneme_per_measure: "xx",
-            phrase_count: "1",
-        },
+        start_time_ns: 428571429,
+        end_time_ns: 857142858,
     },
-    Label {
-        phoneme: PhonemeContext {
-            language_independent_phoneme_id: "a",
-            phoneme_id_two_before: "pau",
-            phoneme_id_previous: "p",
-            phoneme_id_current: "a",
-            phoneme_id_next: "pau",
-            phoneme_id_two_after: "xx",
-            phoneme_flag_two_before: "xx",
-            phoneme_flag_before: "xx",
-            phoneme_flag_current: "00",
-            phoneme_flag_next: "00",
-            phoneme_flag_two_after: "00",
-            syllable_phoneme_position_forward: "2",
-            syllable_phoneme_position_backward: "1",
-            distance_from_prev_vowel: "xx",
-            distance_to_next_vowel: "xx",
-            reserved: "xx",
+    TimedLabel {
+        label: Label {
+            phoneme: PhonemeContext {
+                language_independent_phoneme_id: LabelValue::Some(
+                    "a",
+                ),
+                phoneme_id_two_before: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_previous: LabelValue::Some(
+                    "p",
+                ),
+                phoneme_id_current: LabelValue::Some(
+                    "a",
+                ),
+                phoneme_id_next: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_two_after: LabelValue::None,
+                phoneme_flag_two_before: LabelValue::None,
+                phoneme_flag_before: LabelValue::None,
+                phoneme_flag_current: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_next: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_two_after: LabelValue::Some(
+                    "00",
+                ),
+                syllable_phoneme_position_forward: LabelValue::Some(
+                    "2",
+                ),
+                syllable_phoneme_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                distance_from_prev_vowel: LabelValue::None,
+                distance_to_next_vowel: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            prev_syllable: PrevSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "3",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            curr_syllable: CurrSyllable {
+                phoneme_count: LabelValue::Some(
+                    "2",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "2",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "2",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            next_syllable: NextSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "3",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            prev_note: PrevNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            curr_note: CurrNote {
+                absolute_pitch: LabelValue::Some(
+                    "C4",
+                ),
+                relative_pitch: LabelValue::Some(
+                    "0",
+                ),
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+                measure_note_position_note_forward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_note_backward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_centisecond_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_centisecond_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_backward: LabelValue::Some(
+                    "100",
+                ),
+                phrase_note_position_note_forward: LabelValue::None,
+                phrase_note_position_note_backward: LabelValue::None,
+                phrase_note_position_centisecond_forward: LabelValue::None,
+                phrase_note_position_centisecond_backward: LabelValue::None,
+                phrase_note_position_triplet_32nd_forward: LabelValue::None,
+                phrase_note_position_triplet_32nd_backward: LabelValue::None,
+                phrase_note_position_percent_forward: LabelValue::None,
+                phrase_note_position_percent_backward: LabelValue::None,
+                slur_with_previous: LabelValue::Some(
+                    "0",
+                ),
+                slur_with_next: LabelValue::Some(
+                    "0",
+                ),
+                dynamic_mark: LabelValue::Some(
+                    "n",
+                ),
+                distance_to_next_accent_note: LabelValue::None,
+                distance_to_previous_accent_note: LabelValue::None,
+                distance_to_next_accent_centisecond: LabelValue::None,
+                distance_to_previous_accent_centisecond: LabelValue::None,
+                distance_to_next_accent_triplet_32nd: LabelValue::None,
+                distance_to_previous_accent_triplet_32nd: LabelValue::None,
+                distance_to_next_staccato_note: LabelValue::None,
+                distance_to_previous_staccato_note: LabelValue::None,
+                distance_to_next_staccato_centisecond: LabelValue::None,
+                distance_to_previous_staccato_centisecond: LabelValue::None,
+                distance_to_next_staccato_triplet_32nd: LabelValue::None,
+                distance_to_previous_staccato_triplet_32nd: LabelValue::None,
+                crescendo_position_note_forward: LabelValue::None,
+                crescendo_position_note_backward: LabelValue::None,
+                crescendo_position_second_forward: LabelValue::None,
+                crescendo_position_second_backward: LabelValue::None,
+                crescendo_position_triplet_32nd_forward: LabelValue::None,
+                crescendo_position_triplet_32nd_backward: LabelValue::None,
+                crescendo_position_percent_forward: LabelValue::None,
+                crescendo_position_percent_backward: LabelValue::None,
+                decrescendo_position_note_forward: LabelValue::None,
+                decrescendo_position_note_backward: LabelValue::None,
+                decrescendo_position_second_forward: LabelValue::None,
+                decrescendo_position_second_backward: LabelValue::None,
+                decrescendo_position_triplet_32nd_forward: LabelValue::None,
+                decrescendo_position_triplet_32nd_backward: LabelValue::None,
+                decrescendo_position_percent_forward: LabelValue::None,
+                decrescendo_position_percent_backward: LabelValue::None,
+                pitch_difference_from_previous_note: LabelValue::None,
+                pitch_difference_to_next_note: LabelValue::None,
+                reserved_2: LabelValue::None,
+                reserved_3: LabelValue::None,
+            },
+            next_note: NextNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            prev_phrase: PrevPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            curr_phrase: CurrPhrase {
+                syllable_count: LabelValue::Some(
+                    "3",
+                ),
+                phoneme_count: LabelValue::Some(
+                    "4",
+                ),
+            },
+            next_phrase: NextPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            song: SongContext {
+                syllable_per_measure: LabelValue::None,
+                phoneme_per_measure: LabelValue::None,
+                phrase_count: LabelValue::Some(
+                    "1",
+                ),
+            },
         },
-        prev_syllable: PrevSyllable {
-            phoneme_count: "1",
-            note_position_forward: "1",
-            note_position_backward: "3",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        curr_syllable: CurrSyllable {
-            phoneme_count: "2",
-            note_position_forward: "2",
-            note_position_backward: "2",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        next_syllable: NextSyllable {
-            phoneme_count: "1",
-            note_position_forward: "3",
-            note_position_backward: "1",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        prev_note: PrevNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        curr_note: CurrNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-            measure_note_position_note_forward: "1",
-            measure_note_position_note_backward: "1",
-            measure_note_position_centisecond_forward: "0",
-            measure_note_position_centisecond_backward: "0",
-            measure_note_position_triplet_32nd_forward: "0",
-            measure_note_position_triplet_32nd_backward: "0",
-            measure_note_position_percent_forward: "0",
-            measure_note_position_percent_backward: "100",
-            phrase_note_position_note_forward: "xx",
-            phrase_note_position_note_backward: "xx",
-            phrase_note_position_centisecond_forward: "xx",
-            phrase_note_position_centisecond_backward: "xx",
-            phrase_note_position_triplet_32nd_forward: "xx",
-            phrase_note_position_triplet_32nd_backward: "xx",
-            phrase_note_position_percent_forward: "xx",
-            phrase_note_position_percent_backward: "xx",
-            slur_with_previous: "0",
-            slur_with_next: "0",
-            dynamic_mark: "n",
-            distance_to_next_accent_note: "xx",
-            distance_to_previous_accent_note: "xx",
-            distance_to_next_accent_centisecond: "xx",
-            distance_to_previous_accent_centisecond: "xx",
-            distance_to_next_accent_triplet_32nd: "xx",
-            distance_to_previous_accent_triplet_32nd: "xx",
-            distance_to_next_staccato_note: "xx",
-            distance_to_previous_staccato_note: "xx",
-            distance_to_next_staccato_centisecond: "xx",
-            distance_to_previous_staccato_centisecond: "xx",
-            distance_to_next_staccato_triplet_32nd: "xx",
-            distance_to_previous_staccato_triplet_32nd: "xx",
-            crescendo_position_note_forward: "xx",
-            crescendo_position_note_backward: "xx",
-            crescendo_position_second_forward: "xx",
-            crescendo_position_second_backward: "xx",
-            crescendo_position_triplet_32nd_forward: "xx",
-            crescendo_position_triplet_32nd_backward: "xx",
-            crescendo_position_percent_forward: "xx",
-            crescendo_position_percent_backward: "xx",
-            decrescendo_position_note_forward: "xx",
-            decrescendo_position_note_backward: "xx",
-            decrescendo_position_second_forward: "xx",
-            decrescendo_position_second_backward: "xx",
-            decrescendo_position_triplet_32nd_forward: "xx",
-            decrescendo_position_triplet_32nd_backward: "xx",
-            decrescendo_position_percent_forward: "xx",
-            decrescendo_position_percent_backward: "xx",
-            pitch_difference_from_previous_note: "xx",
-            pitch_difference_to_next_note: "p0",
-            reserved_2: "xx",
-            reserved_3: "xx",
-        },
-        next_note: NextNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        prev_phrase: PrevPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        curr_phrase: CurrPhrase {
-            syllable_count: "3",
-            phoneme_count: "4",
-        },
-        next_phrase: NextPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        song: SongContext {
-            syllable_per_measure: "xx",
-            phoneme_per_measure: "xx",
-            phrase_count: "1",
-        },
+        start_time_ns: 428571429,
+        end_time_ns: 857142858,
     },
-    Label {
-        phoneme: PhonemeContext {
-            language_independent_phoneme_id: "pau",
-            phoneme_id_two_before: "p",
-            phoneme_id_previous: "a",
-            phoneme_id_current: "pau",
-            phoneme_id_next: "xx",
-            phoneme_id_two_after: "xx",
-            phoneme_flag_two_before: "xx",
-            phoneme_flag_before: "xx",
-            phoneme_flag_current: "00",
-            phoneme_flag_next: "00",
-            phoneme_flag_two_after: "00",
-            syllable_phoneme_position_forward: "1",
-            syllable_phoneme_position_backward: "1",
-            distance_from_prev_vowel: "xx",
-            distance_to_next_vowel: "xx",
-            reserved: "xx",
+    TimedLabel {
+        label: Label {
+            phoneme: PhonemeContext {
+                language_independent_phoneme_id: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_two_before: LabelValue::Some(
+                    "p",
+                ),
+                phoneme_id_previous: LabelValue::Some(
+                    "a",
+                ),
+                phoneme_id_current: LabelValue::Some(
+                    "pau",
+                ),
+                phoneme_id_next: LabelValue::None,
+                phoneme_id_two_after: LabelValue::None,
+                phoneme_flag_two_before: LabelValue::None,
+                phoneme_flag_before: LabelValue::None,
+                phoneme_flag_current: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_next: LabelValue::Some(
+                    "00",
+                ),
+                phoneme_flag_two_after: LabelValue::Some(
+                    "00",
+                ),
+                syllable_phoneme_position_forward: LabelValue::Some(
+                    "1",
+                ),
+                syllable_phoneme_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                distance_from_prev_vowel: LabelValue::None,
+                distance_to_next_vowel: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            prev_syllable: PrevSyllable {
+                phoneme_count: LabelValue::Some(
+                    "2",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "2",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "2",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            curr_syllable: CurrSyllable {
+                phoneme_count: LabelValue::Some(
+                    "1",
+                ),
+                note_position_forward: LabelValue::Some(
+                    "3",
+                ),
+                note_position_backward: LabelValue::Some(
+                    "1",
+                ),
+                language: LabelValue::Some(
+                    "JPN",
+                ),
+                language_dependent_context: LabelValue::Some(
+                    "0",
+                ),
+            },
+            next_syllable: NextSyllable {
+                phoneme_count: LabelValue::None,
+                note_position_forward: LabelValue::None,
+                note_position_backward: LabelValue::None,
+                language: LabelValue::None,
+                language_dependent_context: LabelValue::None,
+            },
+            prev_note: PrevNote {
+                absolute_pitch: LabelValue::Some(
+                    "C4",
+                ),
+                relative_pitch: LabelValue::Some(
+                    "0",
+                ),
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+            },
+            curr_note: CurrNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::Some(
+                    "0",
+                ),
+                beat: LabelValue::Some(
+                    "3/4",
+                ),
+                tempo: LabelValue::Some(
+                    "140",
+                ),
+                length_syllable: LabelValue::Some(
+                    "1",
+                ),
+                length_centisecond: LabelValue::Some(
+                    "43",
+                ),
+                length_triplet_32nd: LabelValue::Some(
+                    "24",
+                ),
+                reserved: LabelValue::None,
+                measure_note_position_note_forward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_note_backward: LabelValue::Some(
+                    "1",
+                ),
+                measure_note_position_centisecond_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_centisecond_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_triplet_32nd_backward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_forward: LabelValue::Some(
+                    "0",
+                ),
+                measure_note_position_percent_backward: LabelValue::Some(
+                    "100",
+                ),
+                phrase_note_position_note_forward: LabelValue::None,
+                phrase_note_position_note_backward: LabelValue::None,
+                phrase_note_position_centisecond_forward: LabelValue::None,
+                phrase_note_position_centisecond_backward: LabelValue::None,
+                phrase_note_position_triplet_32nd_forward: LabelValue::None,
+                phrase_note_position_triplet_32nd_backward: LabelValue::None,
+                phrase_note_position_percent_forward: LabelValue::None,
+                phrase_note_position_percent_backward: LabelValue::None,
+                slur_with_previous: LabelValue::Some(
+                    "0",
+                ),
+                slur_with_next: LabelValue::Some(
+                    "0",
+                ),
+                dynamic_mark: LabelValue::Some(
+                    "n",
+                ),
+                distance_to_next_accent_note: LabelValue::None,
+                distance_to_previous_accent_note: LabelValue::None,
+                distance_to_next_accent_centisecond: LabelValue::None,
+                distance_to_previous_accent_centisecond: LabelValue::None,
+                distance_to_next_accent_triplet_32nd: LabelValue::None,
+                distance_to_previous_accent_triplet_32nd: LabelValue::None,
+                distance_to_next_staccato_note: LabelValue::None,
+                distance_to_previous_staccato_note: LabelValue::None,
+                distance_to_next_staccato_centisecond: LabelValue::None,
+                distance_to_previous_staccato_centisecond: LabelValue::None,
+                distance_to_next_staccato_triplet_32nd: LabelValue::None,
+                distance_to_previous_staccato_triplet_32nd: LabelValue::None,
+                crescendo_position_note_forward: LabelValue::None,
+                crescendo_position_note_backward: LabelValue::None,
+                crescendo_position_second_forward: LabelValue::None,
+                crescendo_position_second_backward: LabelValue::None,
+                crescendo_position_triplet_32nd_forward: LabelValue::None,
+                crescendo_position_triplet_32nd_backward: LabelValue::None,
+                crescendo_position_percent_forward: LabelValue::None,
+                crescendo_position_percent_backward: LabelValue::None,
+                decrescendo_position_note_forward: LabelValue::None,
+                decrescendo_position_note_backward: LabelValue::None,
+                decrescendo_position_second_forward: LabelValue::None,
+                decrescendo_position_second_backward: LabelValue::None,
+                decrescendo_position_triplet_32nd_forward: LabelValue::None,
+                decrescendo_position_triplet_32nd_backward: LabelValue::None,
+                decrescendo_position_percent_forward: LabelValue::None,
+                decrescendo_position_percent_backward: LabelValue::None,
+                pitch_difference_from_previous_note: LabelValue::None,
+                pitch_difference_to_next_note: LabelValue::None,
+                reserved_2: LabelValue::None,
+                reserved_3: LabelValue::None,
+            },
+            next_note: NextNote {
+                absolute_pitch: LabelValue::None,
+                relative_pitch: LabelValue::None,
+                key_signature: LabelValue::None,
+                beat: LabelValue::None,
+                tempo: LabelValue::None,
+                length_syllable: LabelValue::None,
+                length_centisecond: LabelValue::None,
+                length_triplet_32nd: LabelValue::None,
+                reserved: LabelValue::None,
+            },
+            prev_phrase: PrevPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            curr_phrase: CurrPhrase {
+                syllable_count: LabelValue::Some(
+                    "3",
+                ),
+                phoneme_count: LabelValue::Some(
+                    "4",
+                ),
+            },
+            next_phrase: NextPhrase {
+                syllable_count: LabelValue::None,
+                phoneme_count: LabelValue::None,
+            },
+            song: SongContext {
+                syllable_per_measure: LabelValue::None,
+                phoneme_per_measure: LabelValue::None,
+                phrase_count: LabelValue::Some(
+                    "1",
+                ),
+            },
         },
-        prev_syllable: PrevSyllable {
-            phoneme_count: "2",
-            note_position_forward: "2",
-            note_position_backward: "2",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        curr_syllable: CurrSyllable {
-            phoneme_count: "1",
-            note_position_forward: "3",
-            note_position_backward: "1",
-            language: "JPN",
-            language_dependent_context: "0",
-        },
-        next_syllable: NextSyllable {
-            phoneme_count: "xx",
-            note_position_forward: "xx",
-            note_position_backward: "xx",
-            language: "xx",
-            language_dependent_context: "xx",
-        },
-        prev_note: PrevNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-        },
-        curr_note: CurrNote {
-            absolute_pitch: "C4",
-            relative_pitch: "0",
-            key_signature: "0",
-            beat: "3/4",
-            tempo: "140",
-            length_syllable: "1",
-            length_centisecond: "43",
-            length_triplet_32nd: "24",
-            reserved: "xx",
-            measure_note_position_note_forward: "1",
-            measure_note_position_note_backward: "1",
-            measure_note_position_centisecond_forward: "0",
-            measure_note_position_centisecond_backward: "0",
-            measure_note_position_triplet_32nd_forward: "0",
-            measure_note_position_triplet_32nd_backward: "0",
-            measure_note_position_percent_forward: "0",
-            measure_note_position_percent_backward: "100",
-            phrase_note_position_note_forward: "xx",
-            phrase_note_position_note_backward: "xx",
-            phrase_note_position_centisecond_forward: "xx",
-            phrase_note_position_centisecond_backward: "xx",
-            phrase_note_position_triplet_32nd_forward: "xx",
-            phrase_note_position_triplet_32nd_backward: "xx",
-            phrase_note_position_percent_forward: "xx",
-            phrase_note_position_percent_backward: "xx",
-            slur_with_previous: "0",
-            slur_with_next: "0",
-            dynamic_mark: "n",
-            distance_to_next_accent_note: "xx",
-            distance_to_previous_accent_note: "xx",
-            distance_to_next_accent_centisecond: "xx",
-            distance_to_previous_accent_centisecond: "xx",
-            distance_to_next_accent_triplet_32nd: "xx",
-            distance_to_previous_accent_triplet_32nd: "xx",
-            distance_to_next_staccato_note: "xx",
-            distance_to_previous_staccato_note: "xx",
-            distance_to_next_staccato_centisecond: "xx",
-            distance_to_previous_staccato_centisecond: "xx",
-            distance_to_next_staccato_triplet_32nd: "xx",
-            distance_to_previous_staccato_triplet_32nd: "xx",
-            crescendo_position_note_forward: "xx",
-            crescendo_position_note_backward: "xx",
-            crescendo_position_second_forward: "xx",
-            crescendo_position_second_backward: "xx",
-            crescendo_position_triplet_32nd_forward: "xx",
-            crescendo_position_triplet_32nd_backward: "xx",
-            crescendo_position_percent_forward: "xx",
-            crescendo_position_percent_backward: "xx",
-            decrescendo_position_note_forward: "xx",
-            decrescendo_position_note_backward: "xx",
-            decrescendo_position_second_forward: "xx",
-            decrescendo_position_second_backward: "xx",
-            decrescendo_position_triplet_32nd_forward: "xx",
-            decrescendo_position_triplet_32nd_backward: "xx",
-            decrescendo_position_percent_forward: "xx",
-            decrescendo_position_percent_backward: "xx",
-            pitch_difference_from_previous_note: "xx",
-            pitch_difference_to_next_note: "xx",
-            reserved_2: "xx",
-            reserved_3: "xx",
-        },
-        next_note: NextNote {
-            absolute_pitch: "xx",
-            relative_pitch: "xx",
-            key_signature: "xx",
-            beat: "xx",
-            tempo: "xx",
-            length_syllable: "xx",
-            length_centisecond: "xx",
-            length_triplet_32nd: "xx",
-            reserved: "xx",
-        },
-        prev_phrase: PrevPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        curr_phrase: CurrPhrase {
-            syllable_count: "3",
-            phoneme_count: "4",
-        },
-        next_phrase: NextPhrase {
-            syllable_count: "xx",
-            phoneme_count: "xx",
-        },
-        song: SongContext {
-            syllable_per_measure: "xx",
-            phoneme_per_measure: "xx",
-            phrase_count: "1",
-        },
+        start_time_ns: 857142858,
+        end_time_ns: 1285714287,
     },
 ]

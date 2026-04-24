@@ -4,9 +4,9 @@ require "fileutils"
 require "tmpdir"
 
 task :link do
-  target_destination = ENV["APPDATA"] + "/TuneLab/Extensions/tunelab-neutrino-tau"
-  output_dir = "#{__dir__}/bin/Debug/net8.0"
-  nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
+  target_destination = ENV["APPDATA"] + "/TuneLab/Extensions/Neutrino Tau"
+  # output_dir = "#{__dir__}/bin/Debug/net8.0"
+  # nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
   mkdir_p target_destination
   ln_s "#{__dir__}/description.json", target_destination + "/description.json", force: true
   Dir.glob("./bin/Debug/net8.0/*.dll").each do |dll|
@@ -18,7 +18,7 @@ task :pack do
   project_file = File.join(__dir__, "NeutrinoTau.csproj")
   release_dir = File.join(__dir__, "bin", "Release", "net8.0")
   artifacts_dir = File.join(__dir__, "artifacts")
-  package_name = ENV.fetch("PACKAGE_NAME", "tunelab-neutrino-tau")
+  package_name = ENV.fetch("PACKAGE_NAME", "Neutrino Tau")
   zip_path = File.join(artifacts_dir, "#{package_name}.zip")
   tlx_path = File.join(artifacts_dir, "#{package_name}.tlx")
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)

@@ -3,9 +3,23 @@ use lazy_regex::{regex, Regex};
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct LabelValue(String);
 
+impl LabelValue {
+    pub fn as_option(&self) -> Option<&str> {
+        if self.0 == "xx" {
+            None
+        } else {
+            Some(self.0.as_str())
+        }
+    }
+}
+
 impl std::fmt::Debug for LabelValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
+        if let Some(s) = self.as_option() {
+            f.debug_tuple("LabelValue::Some").field(&s).finish()
+        } else {
+            f.write_str("LabelValue::None")
+        }
     }
 }
 

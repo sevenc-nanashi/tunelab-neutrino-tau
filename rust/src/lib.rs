@@ -137,6 +137,7 @@ pub unsafe extern "C" fn neutrino_tau_load_voice_sources_json(
         Ok(voices) => match serde_json::to_string(&voices) {
             Ok(json) => create_c_string(&json),
             Err(e) => {
+                engine.log_error(&format!("Failed to serialize voice sources: {}", e));
                 if !err.is_null() {
                     let err_msg =
                         create_c_string(&format!("Failed to serialize voice sources: {}", e));
@@ -146,6 +147,7 @@ pub unsafe extern "C" fn neutrino_tau_load_voice_sources_json(
             }
         },
         Err(e) => {
+            engine.log_error(&format!("Failed to load voice sources: {}", e));
             if !err.is_null() {
                 let err_msg = create_c_string(&format!("Failed to load voice sources: {}", e));
                 *err = err_msg;
@@ -230,6 +232,7 @@ pub unsafe extern "C" fn neutrino_tau_synthesize(
     };
     let cancel_token = cancel_token.token.clone();
     if cancel_token.load(std::sync::atomic::Ordering::SeqCst) {
+        engine.log_info("Synthesis request was already cancelled before native execution");
         if !err.is_null() {
             let err_msg = create_c_string("Synthesis cancelled");
             unsafe {
@@ -239,9 +242,10 @@ pub unsafe extern "C" fn neutrino_tau_synthesize(
         return std::ptr::null_mut();
     }
 
-    match engine.synthesize(payload_json) {
+    match engine.synthesize(payload_json, &cancel_token) {
         Ok(json) => create_c_string(&json),
         Err(e) => {
+            engine.log_error(&format!("Native synthesis failed: {}", e));
             if !err.is_null() {
                 let err_msg = create_c_string(&e.to_string());
                 unsafe {
