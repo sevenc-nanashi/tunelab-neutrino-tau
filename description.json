@@ -2,7 +2,9 @@
   "name": "Neutrino Tau",
   "company": "sevenc-nanashi",
   "platforms": [
-    "win-x64"
+    "win-x64",
+    "osx",
+    "linux"
   ],
   "assemblies": [
     "NeutrinoTau.dll"

@@ -1,16 +1,19 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "rbconfig"
 require "tmpdir"
 
 task :link do
+  raise "link task is only supported on Windows" unless windows?
+
   target_destination = ENV["APPDATA"] + "/TuneLab/Extensions/Neutrino Tau"
   # output_dir = "#{__dir__}/bin/Debug/net8.0"
   # nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
   mkdir_p target_destination
   ln_s "#{__dir__}/description.json", target_destination + "/description.json", force: true
-  Dir.glob("./bin/Debug/net8.0/*.dll").each do |dll|
-    ln_s File.expand_path(dll), target_destination + "/" + File.basename(dll), force: true
+  Dir.glob("./bin/Debug/net8.0/*.{dll,dylib,so}").each do |library|
+    ln_s File.expand_path(library), target_destination + "/" + File.basename(library), force: true
   end
 end
 
@@ -30,20 +33,29 @@ task :pack do
     mkdir_p artifacts_dir
     cp File.join(__dir__, "description.json"), File.join(staging_dir, "description.json")
 
-    dlls = Dir.glob(File.join(release_dir, "*.dll"))
-    raise "No DLL found in #{release_dir}" if dlls.empty?
+    libraries = Dir.glob(File.join(release_dir, "*.{dll,dylib,so}"))
+    raise "No library found in #{release_dir}" if libraries.empty?
 
-    dlls.each do |dll|
-      cp dll, File.join(staging_dir, File.basename(dll))
+    libraries.each do |library|
+      cp library, File.join(staging_dir, File.basename(library))
     end
 
-    escaped_zip_path = zip_path.gsub("'", "''")
-    escaped_staging_dir = staging_dir.gsub("'", "''")
-    sh %(pwsh -NoLogo -NoProfile -Command "if (Test-Path -LiteralPath '#{escaped_zip_path}') { Remove-Item -LiteralPath '#{escaped_zip_path}' -Force }; Compress-Archive -Path '#{escaped_staging_dir}/*' -DestinationPath '#{escaped_zip_path}' -Force")
+    rm_f zip_path
+    if windows?
+      escaped_zip_path = zip_path.gsub("'", "''")
+      escaped_staging_dir = staging_dir.gsub("'", "''")
+      sh %(pwsh -NoLogo -NoProfile -Command "Compress-Archive -Path '#{escaped_staging_dir}/*' -DestinationPath '#{escaped_zip_path}' -Force")
+    else
+      sh "cd \"#{staging_dir}\" && zip -qr \"#{zip_path}\" ."
+    end
     mv zip_path, tlx_path, force: true
 
     puts "Packed: #{tlx_path}"
   ensure
     FileUtils.remove_entry(staging_dir, true) if Dir.exist?(staging_dir)
   end
+end
+
+def windows?
+  RbConfig::CONFIG["host_os"].match?(/mswin|mingw|cygwin/)
 end
