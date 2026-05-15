@@ -10,6 +10,8 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+#[cfg(not(windows))]
+use tap::prelude::*;
 
 #[derive(Debug)]
 pub struct Engine {
@@ -20,6 +22,7 @@ pub struct Engine {
 type WavData = (wav_io::header::WavHeader, Vec<f32>);
 const CLIENT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const CANCEL_GRACE_PERIOD: Duration = Duration::from_secs(3);
+#[cfg(windows)]
 const SERVER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 const LOG_FILE_NAME: &str = "neutrino-tau-native.log";
 static LOGGER_INIT: std::sync::Once = std::sync::Once::new();
@@ -291,6 +294,16 @@ impl Engine {
 
     fn select_neutrino_path() -> anyhow::Result<PathBuf> {
         info!("neutrino_path is not configured. Opening file dialog");
+
+        native_dialog::MessageDialogBuilder::default()
+            .set_title("Neutrino path not configured")
+            .set_text("Please select the Neutrino executable to use with this plugin. The executable should be named 'neutrino.exe' on Windows or 'neutrino' on other platforms.")
+            .alert()
+            .show()
+            .inspect_err(|e| {
+                error!("Failed to show message dialog: {}", e);
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to show message dialog: {}", e))?;
         let title = format!("Select {NEUTRINO_FILENAME}");
         let Some(result) = native_dialog::FileDialogBuilder::default()
             .set_title(&title)
@@ -899,6 +912,13 @@ impl Neutrino for LocalNeutrino {
 
         let child = command_hidden(&neutrino_path)
             .args(args)
+            .pipe(|cmd| {
+                if cfg!(target_os = "macos") {
+                    cmd.env("DYLD_LIBRARY_PATH", self.root_path.join("bin"))
+                } else {
+                    cmd
+                }
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -963,13 +983,14 @@ fn write_timing_label_file(
     Ok(generated_label_file)
 }
 
+#[cfg(windows)]
 fn command_hidden(path: &Path) -> std::process::Command {
-    let mut command = std::process::Command::new(path);
-    #[cfg(windows)]
-    {
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-    command
+    std::process::Command::new(path).creation_flags(0x08000000) // CREATE_NO_WINDOW
+}
+
+#[cfg(not(windows))]
+fn command_hidden(path: &Path) -> std::process::Command {
+    std::process::Command::new(path)
 }
 
 fn wait_for_neutrino_process<F>(
