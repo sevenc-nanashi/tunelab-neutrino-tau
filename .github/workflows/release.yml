@@ -72,10 +72,21 @@ jobs:
           pattern: tunelab-neutrino-tau-${{ inputs.version }}-*
           merge-multiple: true
 
+      - name: Check if version is a prerelease
+        id: check_prerelease
+        shell: bash
+        run: |
+          if [[ "${{ inputs.version }}" == *"-"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: v${{ inputs.version }}
+          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
           files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}-*.tlx
           generate_release_notes: true
