@@ -1,8 +1,5 @@
 # Neutrino Tau for TuneLab
 
-> [!WARNING]
-> ボカコレに間に合わせるために突貫工事で作ったものなのでだいぶ雑だし動くことは保証できません。あくまで参考程度にしてください。
-
 Neutrino Tau for TuneLab は [TuneLab](https://github.com/LiuYunPlayer/TuneLab) で Neutrino を使用するためのプラグインです。
 
 ## インストール

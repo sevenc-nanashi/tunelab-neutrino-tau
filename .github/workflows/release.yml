@@ -12,8 +12,15 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  pack:
+    name: Pack (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -50,14 +57,25 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: tunelab-neutrino-tau-${{ inputs.version }}
-          path: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          name: tunelab-neutrino-tau-${{ inputs.version }}-${{ matrix.os }}
+          path: artifacts/tunelab-neutrino-tau-${{ inputs.version }}-*.tlx
           if-no-files-found: error
 
+  release:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download workflow artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: tunelab-neutrino-tau-${{ inputs.version }}-*
+          merge-multiple: true
+
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: v${{ inputs.version }}
-          files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}-*.tlx
           generate_release_notes: true

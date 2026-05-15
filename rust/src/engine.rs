@@ -985,7 +985,9 @@ fn write_timing_label_file(
 
 #[cfg(windows)]
 fn command_hidden(path: &Path) -> std::process::Command {
-    std::process::Command::new(path).creation_flags(0x08000000) // CREATE_NO_WINDOW
+    let mut cmd = std::process::Command::new(path);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
 }
 
 #[cfg(not(windows))]

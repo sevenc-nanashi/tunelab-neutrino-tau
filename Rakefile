@@ -7,7 +7,7 @@ require "tmpdir"
 task :link do
   raise "link task is only supported on Windows" unless windows?
 
-  target_destination = ENV["APPDATA"] + "/TuneLab/Extensions/Neutrino Tau"
+  target_destination = ENV["APPDATA"] + "/TuneLab/Extensions/tunelab-neutrino-tau"
   # output_dir = "#{__dir__}/bin/Debug/net8.0"
   # nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
   mkdir_p target_destination
@@ -21,9 +21,11 @@ task :pack do
   project_file = File.join(__dir__, "NeutrinoTau.csproj")
   release_dir = File.join(__dir__, "bin", "Release", "net8.0")
   artifacts_dir = File.join(__dir__, "artifacts")
-  package_name = ENV.fetch("PACKAGE_NAME", "Neutrino Tau")
+  package_name = ENV.fetch("PACKAGE_NAME", "tunelab-neutrino-tau")
   zip_path = File.join(artifacts_dir, "#{package_name}.zip")
-  tlx_path = File.join(artifacts_dir, "#{package_name}.tlx")
+  os = windows? ? "win" : "osx"
+  arch = arm64? ? "arm64" : "x64"
+  tlx_path = File.join(artifacts_dir, "#{package_name}-#{os}-#{arch}.tlx")
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)
 
   begin
@@ -58,4 +60,8 @@ end
 
 def windows?
   RbConfig::CONFIG["host_os"].match?(/mswin|mingw|cygwin/)
+end
+
+def arm64?
+  RbConfig::CONFIG["host_cpu"] == "aarch64"
 end

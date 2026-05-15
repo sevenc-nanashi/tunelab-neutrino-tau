@@ -1,13 +1,6 @@
 {
-  "name": "Neutrino Tau",
+  "name": "tunelab-neutrino-tau",
   "company": "sevenc-nanashi",
-  "platforms": [
-    "win-x64",
-    "osx",
-    "linux"
-  ],
-  "assemblies": [
-    "NeutrinoTau.dll"
-  ],
+  "platforms": ["win-x64", "osx", "linux"],
   "version": "0.1.0"
 }
