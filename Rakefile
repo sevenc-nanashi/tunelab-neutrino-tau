@@ -18,6 +18,8 @@ task :link do
 end
 
 task :pack do
+  require "json"
+
   project_file = File.join(__dir__, "NeutrinoTau.csproj")
   release_dir = File.join(__dir__, "bin", "Release", "net8.0")
   artifacts_dir = File.join(__dir__, "artifacts")
@@ -25,6 +27,7 @@ task :pack do
   zip_path = File.join(artifacts_dir, "#{package_name}.zip")
   os = windows? ? "win" : "osx"
   arch = arm64? ? "arm64" : "x64"
+  version = ENV.fetch("PACKAGE_VERSION", "0.1.0")
   tlx_path = File.join(artifacts_dir, "#{package_name}-#{os}-#{arch}.tlx")
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)
 
@@ -33,7 +36,10 @@ task :pack do
     sh "dotnet build \"#{project_file}\" -c Release"
 
     mkdir_p artifacts_dir
-    cp File.join(__dir__, "description.json"), File.join(staging_dir, "description.json")
+    # cp File.join(__dir__, "description.json"), File.join(staging_dir, "description.json")
+    description = JSON.parse(File.read(File.join(__dir__, "description.json")))
+    description["version"] = version
+    File.write(File.join(staging_dir, "description.json"), JSON.pretty_generate(description))
 
     libraries = Dir.glob(File.join(release_dir, "*.{dll,dylib,so}"))
     raise "No library found in #{release_dir}" if libraries.empty?

@@ -52,6 +52,7 @@ jobs:
         shell: pwsh
         env:
           PACKAGE_NAME: tunelab-neutrino-tau-${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.version }}
         run: rake pack
 
       - name: Upload workflow artifact
