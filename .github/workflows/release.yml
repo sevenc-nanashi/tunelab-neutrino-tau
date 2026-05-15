@@ -12,8 +12,15 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  pack:
+    name: Pack (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -45,19 +52,42 @@ jobs:
         shell: pwsh
         env:
           PACKAGE_NAME: tunelab-neutrino-tau-${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.version }}
         run: rake pack
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: tunelab-neutrino-tau-${{ inputs.version }}
-          path: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          name: tunelab-neutrino-tau-${{ inputs.version }}-${{ matrix.os }}
+          path: artifacts/tunelab-neutrino-tau-${{ inputs.version }}-*.tlx
           if-no-files-found: error
 
+  release:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download workflow artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: tunelab-neutrino-tau-${{ inputs.version }}-*
+          merge-multiple: true
+
+      - name: Check if version is a prerelease
+        id: check_prerelease
+        shell: bash
+        run: |
+          if [[ "${{ inputs.version }}" == *"-"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: v${{ inputs.version }}
-          files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}.tlx
+          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+          files: artifacts/tunelab-neutrino-tau-${{ inputs.version }}-*.tlx
           generate_release_notes: true

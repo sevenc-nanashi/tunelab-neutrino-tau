@@ -16,7 +16,10 @@
     <RustProfile Condition="'$(Configuration)' == 'Release'">release</RustProfile>
     <RustProfile Condition="'$(RustProfile)' == ''">debug</RustProfile>
     <RustOutputDir>$(MSBuildProjectDirectory)\target\$(RustProfile)</RustOutputDir>
-    <RustNativeLibraryPath>$(RustOutputDir)\$(RustNativeLibraryName).dll</RustNativeLibraryPath>
+    <RustNativeLibraryFileName Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(RustNativeLibraryName).dll</RustNativeLibraryFileName>
+    <RustNativeLibraryFileName Condition="$([MSBuild]::IsOSPlatform('OSX'))">lib$(RustNativeLibraryName).dylib</RustNativeLibraryFileName>
+    <RustNativeLibraryFileName Condition="$([MSBuild]::IsOSPlatform('Linux'))">lib$(RustNativeLibraryName).so</RustNativeLibraryFileName>
+    <RustNativeLibraryPath>$(RustOutputDir)\$(RustNativeLibraryFileName)</RustNativeLibraryPath>
   </PropertyGroup>
 
   <ItemGroup>
