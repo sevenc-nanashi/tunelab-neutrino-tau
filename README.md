@@ -11,6 +11,7 @@ Neutrino Tau for TuneLab は [TuneLab](https://github.com/LiuYunPlayer/TuneLab) 
 2. [TuneLab](https://github.com/LiuYunPlayer/TuneLab) の最新版をダウンロードしてインストールします。
 3. [Releases](https://github.com/sevenc-nanashi/tunelab-neutrino-tau/releases) から最新の `tunelab-neutrino-tau-x.x.x.tlx` をダウンロードします。
 4. `Extensions`から`Install/Update...`からダウンロードした `.tlx` ファイルを選択してインストールします。
+5. TuneLab の `Settings` > `Extensions` > `Neutrino Tau` を開き、`NEUTRINO Path` に NEUTRINO のインストール先を設定します。
 
 ## パートのプロパティ
 

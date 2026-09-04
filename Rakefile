@@ -8,7 +8,9 @@ task :link do
   # output_dir = "#{__dir__}/bin/Debug/net8.0"
   # nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
   mkdir_p target_destination
-  ln_s "#{__dir__}/manifest.json", target_destination + "/manifest.json", force: true
+  ln_s "#{__dir__}/src/manifest.json", target_destination + "/manifest.json", force: true
+  ln_s "#{__dir__}/src/docs/introduction.en.md", target_destination + "/introduction.en.md", force: true
+  ln_s "#{__dir__}/src/docs/introduction.ja.md", target_destination + "/introduction.ja.md", force: true
   ["NeutrinoTau.dll", "neutrino_tau_native.dll"].each do |name|
     dll = File.join(__dir__, "bin", "Debug", "net8.0", name)
     raise "Missing build output: #{dll}" unless File.file?(dll)
@@ -27,11 +29,13 @@ task :pack do
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)
 
   begin
-    sh "cargo build"
+    sh "cargo build -r"
     sh "dotnet build \"#{project_file}\" -c Release"
 
     mkdir_p artifacts_dir
-    cp File.join(__dir__, "manifest.json"), File.join(staging_dir, "manifest.json")
+    cp File.join(__dir__, "src/manifest.json"), File.join(staging_dir, "manifest.json")
+    cp File.join(__dir__, "src/docs/introduction.en.md"), File.join(staging_dir, "introduction.en.md")
+    cp File.join(__dir__, "src/docs/introduction.ja.md"), File.join(staging_dir, "introduction.ja.md")
 
     dlls = ["NeutrinoTau.dll", "neutrino_tau_native.dll"].map do |name|
       path = File.join(release_dir, name)

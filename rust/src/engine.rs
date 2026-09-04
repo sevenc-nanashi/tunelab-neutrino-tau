@@ -1,5 +1,3 @@
-use crate::config;
-use anyhow::Context;
 use itertools::Itertools;
 use log::{debug, error, info};
 use std::io::Write;
@@ -38,103 +36,37 @@ const NEUTRINO_CLIENT_FILENAME: &str = cfg_select! {
 };
 
 impl Engine {
-    pub fn new(dll_path: std::path::PathBuf) -> anyhow::Result<Self> {
+    pub fn new(
+        dll_path: std::path::PathBuf,
+        neutrino_path: std::path::PathBuf,
+    ) -> anyhow::Result<Self> {
         init_logger(&dll_path);
         info!("Creating engine. dll_dir={}", dll_path.display());
-        let config_path = dll_path.join("config.json");
-        info!("Loading config from {}", config_path.display());
-        let mut config = if config_path.exists() {
-            let config_str = std::fs::read_to_string(&config_path)
-                .inspect_err(|e| {
-                    error!("Failed to read config file: {}", e);
-                })
-                .map_err(|e| anyhow::anyhow!("Failed to read config file: {}", e))?;
-            let config = serde_json::from_str(&config_str)
-                .inspect_err(|e| {
-                    error!("Failed to parse config file: {}", e);
-                })
-                .map_err(|e| anyhow::anyhow!("Failed to parse config file: {}", e))?;
-            info!("Loaded config.json successfully");
-            config
-        } else {
-            info!("config.json not found. Using default config");
-            config::Config::default()
-        };
-        if config.neutrino_path.is_none() {
-            let selected_neutrino_path = Self::select_neutrino_path()?;
-            config.neutrino_path = Some(
-                selected_neutrino_path
-                    .to_str()
-                    .context("Failed to convert Neutrino path to string, try moving Neutrino to a path with ASCII characters only")?
-                    .to_string(),
-            );
-
-            std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)
-                .inspect_err(|e| {
-                    error!("Failed to write config file: {}", e);
-                })
-                .map_err(|e| anyhow::anyhow!("Failed to write config file: {}", e))?;
-            info!("Persisted config.json successfully");
-        }
-
-        let neutrino_path = config.neutrino_path.as_ref().unwrap();
-        if !std::path::Path::new(neutrino_path).exists() {
-            error!("Neutrino path does not exist: {}", neutrino_path);
+        if !neutrino_path.exists() {
+            error!("Neutrino path does not exist: {}", neutrino_path.display());
             return Err(anyhow::anyhow!(
                 "Neutrino path does not exist: {}",
-                neutrino_path
+                neutrino_path.display()
             ));
         }
-        info!("Using neutrino_path={}", neutrino_path);
+        let neutrino_executable = neutrino_path.join("bin").join(NEUTRINO_FILENAME);
+        if !neutrino_executable.exists() {
+            error!(
+                "NEUTRINO executable does not exist: {}",
+                neutrino_executable.display()
+            );
+            return Err(anyhow::anyhow!(
+                "NEUTRINO executable does not exist: {}",
+                neutrino_executable.display()
+            ));
+        }
+        info!("Using neutrino_path={}", neutrino_path.display());
 
         Ok(Self {
             dll_path,
-            neutrino_path: config.neutrino_path.unwrap().into(),
+            neutrino_path,
             server: None,
         })
-    }
-
-    fn select_neutrino_path() -> anyhow::Result<PathBuf> {
-        info!("neutrino_path is not configured. Opening file dialog");
-        let Some(result) = native_dialog::FileDialogBuilder::default()
-            .set_title("Select neutrino.exe")
-            .add_filter("Executable", ["exe"])
-            .open_single_file()
-            .show()?
-        else {
-            error!("Neutrino path is required but not provided");
-            return Err(anyhow::anyhow!(
-                "Neutrino path is required but not provided"
-            ));
-        };
-
-        info!("Selected neutrino.exe candidate: {}", result.display());
-        if !result.exists() {
-            error!(
-                "Selected Neutrino path does not exist: {}",
-                result.display()
-            );
-            return Err(anyhow::anyhow!(
-                "Selected Neutrino path does not exist: {}",
-                result.display()
-            ));
-        }
-        if result.file_name().and_then(|n| n.to_str()) != Some("neutrino.exe") {
-            error!("Selected file is not neutrino.exe: {}", result.display());
-            return Err(anyhow::anyhow!(
-                "Selected file is not neutrino.exe: {}",
-                result.display()
-            ));
-        }
-
-        let neutrino_root = result.parent().and_then(|p| p.parent()).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Failed to determine Neutrino root directory from selected path: {}",
-                result.display()
-            )
-        })?;
-        info!("Resolved neutrino root: {}", neutrino_root.display());
-        Ok(neutrino_root.to_path_buf())
     }
 
     fn spawn_server(&mut self) -> anyhow::Result<()> {
@@ -146,7 +78,10 @@ impl Engine {
             info!("Neutrino server is already running");
             return Ok(());
         }
-        let server_path = self.neutrino_path.join("bin").join("neutrino_server.exe");
+        let server_path = self
+            .neutrino_path
+            .join("bin")
+            .join(NEUTRINO_SERVER_FILENAME);
         if !server_path.exists() {
             error!(
                 "Neutrino server executable not found at: {}",
@@ -776,7 +711,7 @@ impl Engine {
         self.spawn_server()?;
         let client_path = std::path::Path::new(&self.neutrino_path)
             .join("bin")
-            .join("neutrino_client.exe");
+            .join(NEUTRINO_CLIENT_FILENAME);
         info!("Invoking Neutrino client with args: {}", args.join(" "));
         if !client_path.exists() {
             error!(
@@ -865,7 +800,7 @@ impl Engine {
     fn try_shutdown_server(&mut self) -> anyhow::Result<()> {
         let client_path = std::path::Path::new(&self.neutrino_path)
             .join("bin")
-            .join("neutrino_client.exe");
+            .join(NEUTRINO_CLIENT_FILENAME);
         info!("Sending shutdown command to Neutrino server");
         if !client_path.exists() {
             error!(

@@ -11,5 +11,11 @@
   "platforms": [
     "win-x64"
   ],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "introduction": "introduction.en.md",
+  "localizations": {
+    "ja-JP": {
+      "introduction": "introduction.ja.md"
+    }
+  }
 }

@@ -1,5 +1,4 @@
 #![allow(clippy::missing_safety_doc)]
-mod config;
 mod engine;
 mod neutrino_label;
 mod neutrino_score;
@@ -69,6 +68,7 @@ pub unsafe extern "C" fn neutrino_tau_destroy_cancel_token(token: *mut CancelTok
 #[no_mangle]
 pub unsafe extern "C" fn neutrino_tau_create_engine(
     dll_path: *const std::ffi::c_char,
+    neutrino_path: *const std::ffi::c_char,
     err: *mut *mut std::ffi::c_char,
 ) -> *mut CEngine {
     let dll_path = unsafe {
@@ -86,7 +86,22 @@ pub unsafe extern "C" fn neutrino_tau_create_engine(
     };
     let dll_path = std::path::PathBuf::from(dll_path);
 
-    let engine = match engine::Engine::new(dll_path) {
+    let neutrino_path = unsafe {
+        let cstr = std::ffi::CStr::from_ptr(neutrino_path);
+        match cstr.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                if !err.is_null() {
+                    let err_msg = create_c_string("Invalid NEUTRINO path string");
+                    *err = err_msg;
+                }
+                return std::ptr::null_mut();
+            }
+        }
+    };
+    let neutrino_path = std::path::PathBuf::from(neutrino_path);
+
+    let engine = match engine::Engine::new(dll_path, neutrino_path) {
         Ok(engine) => engine,
         Err(e) => {
             if !err.is_null() {

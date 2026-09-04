@@ -6,12 +6,40 @@ using TuneLab.SDK;
 
 namespace NeutrinoTau;
 
-public unsafe sealed class NeutrinoTauVoiceEngine : IVoiceSynthesisEngine
+public unsafe sealed class NeutrinoTauVoiceEngine : IVoiceSynthesisEngine, IExtensionSettings
 {
     public IReadOnlyOrderedMap<string, VoiceSourceInfo> VoiceSourceInfos => _voiceSourceInfos;
 
+    public ObjectConfig GetSettingsConfig(IExtensionSettingsContext context)
+    {
+        var properties = new OrderedMap<PropertyKey, IControllerConfig>
+        {
+            { (NeutrinoPathSettingKey, "NEUTRINO Path"), TextBoxConfig.Create(string.Empty) },
+        };
+        return ObjectConfig.Create(properties);
+    }
+
+    public void ApplySettings(PropertyObject settings)
+    {
+        var neutrinoPath = settings.GetString(NeutrinoPathSettingKey, string.Empty);
+        if (_nativeEngine != null && neutrinoPath != _neutrinoPath)
+        {
+            TuneLabContext.Global.GetLogger().Info(
+              "The updated NEUTRINO path will be applied after restarting TuneLab."
+            );
+        }
+        _neutrinoPath = neutrinoPath;
+    }
+
     public void Init()
     {
+        if (string.IsNullOrWhiteSpace(_neutrinoPath))
+        {
+            throw new InvalidOperationException(
+              "NEUTRINO path is not configured. Set it in Settings > Extensions."
+            );
+        }
+
         var enginePath = Path.GetDirectoryName(typeof(NeutrinoTauVoiceEngine).Assembly.Location);
         if (enginePath == null)
         {
@@ -21,10 +49,16 @@ public unsafe sealed class NeutrinoTauVoiceEngine : IVoiceSynthesisEngine
         TuneLabContext.Global.GetLogger().Info($"Initializing Neutrino Tau voice engine at: {enginePath}");
 
         var enginePathBytes = System.Text.Encoding.UTF8.GetBytes(enginePath + "\0");
+        var neutrinoPathBytes = System.Text.Encoding.UTF8.GetBytes(_neutrinoPath + "\0");
         fixed (byte* enginePathPtr = enginePathBytes)
+        fixed (byte* neutrinoPathPtr = neutrinoPathBytes)
         {
             byte* errorPtr = null;
-            _nativeEngine = Native.NativeMethods.neutrino_tau_create_engine(enginePathPtr, &errorPtr);
+            _nativeEngine = Native.NativeMethods.neutrino_tau_create_engine(
+              enginePathPtr,
+              neutrinoPathPtr,
+              &errorPtr
+            );
             if (_nativeEngine == null)
             {
                 var error = errorPtr != null ? Marshal.PtrToStringUTF8((IntPtr)errorPtr) : "Unknown error";
@@ -152,8 +186,10 @@ public unsafe sealed class NeutrinoTauVoiceEngine : IVoiceSynthesisEngine
     }
 
     private Native.CEngine* _nativeEngine;
+    private string _neutrinoPath = string.Empty;
     private readonly OrderedMap<string, VoiceSourceInfo> _voiceSourceInfos = [];
 
+    private const string NeutrinoPathSettingKey = "neutrino_path";
     private static readonly OrderedMap<PropertyKey, AutomationConfig> EmptyAutomationConfigs = [];
     private static readonly ObjectConfig PartPropertyConfig = ObjectConfig.Create(
       new OrderedMap<PropertyKey, IControllerConfig>
