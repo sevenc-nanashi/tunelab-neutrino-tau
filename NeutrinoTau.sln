@@ -9,9 +9,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "external", "external", "{A2
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tunelab", "tunelab", "{078BC6E2-B130-A2B6-2061-E9C53F546AEE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TuneLab.Base", "external\tunelab\TuneLab.Base\TuneLab.Base.csproj", "{FEC1FC4A-FEFF-4AA9-AE07-C9C95E5B3E53}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TuneLab.Foundation", "external\tunelab\TuneLab.Foundation\TuneLab.Foundation.csproj", "{FEC1FC4A-FEFF-4AA9-AE07-C9C95E5B3E53}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TuneLab.Extensions.Voices", "external\tunelab\TuneLab.Extensions.Voices\TuneLab.Extensions.Voices.csproj", "{33EEE860-216A-4566-B527-121AE65627A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TuneLab.SDK", "external\tunelab\TuneLab.SDK\TuneLab.SDK.csproj", "{33EEE860-216A-4566-B527-121AE65627A7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

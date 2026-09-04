@@ -1,0 +1,15 @@
+{
+  "id": "com.sevenc-nanashi.neutrino-tau",
+  "name": "Neutrino Tau",
+  "author": "sevenc-nanashi",
+  "description": "NEUTRINO voice synthesis support for TuneLab.",
+  "sdk-version": "1.0",
+  "type": "voice",
+  "engine": "neutrino-tau",
+  "class": "NeutrinoTau.NeutrinoTauVoiceEngine",
+  "assembly": "NeutrinoTau.dll",
+  "platforms": [
+    "win-x64"
+  ],
+  "version": "0.1.0"
+}

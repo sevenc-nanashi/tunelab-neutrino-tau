@@ -37,9 +37,9 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ inputs.version }}"
-          $description = Get-Content -LiteralPath "description.json" -Raw | ConvertFrom-Json
-          $description.version = $version
-          $description | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "description.json" -Encoding utf8
+          $manifest = Get-Content -LiteralPath "manifest.json" -Raw | ConvertFrom-Json
+          $manifest.version = $version
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "manifest.json" -Encoding utf8
 
       - name: Pack extension
         shell: pwsh

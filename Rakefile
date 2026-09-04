@@ -8,8 +8,11 @@ task :link do
   # output_dir = "#{__dir__}/bin/Debug/net8.0"
   # nuget_dir = ENV["USERPROFILE"] + "/.nuget/packages"
   mkdir_p target_destination
-  ln_s "#{__dir__}/description.json", target_destination + "/description.json", force: true
-  Dir.glob("./bin/Debug/net8.0/*.dll").each do |dll|
+  ln_s "#{__dir__}/manifest.json", target_destination + "/manifest.json", force: true
+  ["NeutrinoTau.dll", "neutrino_tau_native.dll"].each do |name|
+    dll = File.join(__dir__, "bin", "Debug", "net8.0", name)
+    raise "Missing build output: #{dll}" unless File.file?(dll)
+
     ln_s File.expand_path(dll), target_destination + "/" + File.basename(dll), force: true
   end
 end
@@ -28,10 +31,14 @@ task :pack do
     sh "dotnet build \"#{project_file}\" -c Release"
 
     mkdir_p artifacts_dir
-    cp File.join(__dir__, "description.json"), File.join(staging_dir, "description.json")
+    cp File.join(__dir__, "manifest.json"), File.join(staging_dir, "manifest.json")
 
-    dlls = Dir.glob(File.join(release_dir, "*.dll"))
-    raise "No DLL found in #{release_dir}" if dlls.empty?
+    dlls = ["NeutrinoTau.dll", "neutrino_tau_native.dll"].map do |name|
+      path = File.join(release_dir, name)
+      raise "Missing build output: #{path}" unless File.file?(path)
+
+      path
+    end
 
     dlls.each do |dll|
       cp dll, File.join(staging_dir, File.basename(dll))

@@ -21,8 +21,8 @@
 
   <ItemGroup>
     <Compile Include="src\**\*.cs" />
-    <ProjectReference Include=".\external\tunelab\TuneLab.Base\TuneLab.Base.csproj" />
-    <ProjectReference Include=".\external\tunelab\TuneLab.Extensions.Voices\TuneLab.Extensions.Voices.csproj" />
+    <ProjectReference Include=".\external\tunelab\TuneLab.Foundation\TuneLab.Foundation.csproj" Private="false" />
+    <ProjectReference Include=".\external\tunelab\TuneLab.SDK\TuneLab.SDK.csproj" Private="false" />
   </ItemGroup>
 
   <Target Name="BuildRustNativeLibrary" BeforeTargets="CoreCompile">
