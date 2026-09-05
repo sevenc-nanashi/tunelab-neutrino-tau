@@ -29,7 +29,8 @@ task :pack do
   staging_dir = Dir.mktmpdir("./pack.stage", __dir__)
 
   begin
-    sh "cargo build -r"
+    # NativeMethods.g.csを生成するために一旦cargo buildする、これはdebug buildで十分
+    sh "cargo build"
     sh "dotnet build \"#{project_file}\" -c Release"
 
     mkdir_p artifacts_dir

@@ -59,6 +59,10 @@ impl NoteLength {
     pub fn to_nanoseconds(self, tempo: f64) -> u64 {
         length_triplet_32nd_to_nanoseconds(self.0, tempo)
     }
+
+    pub fn saturating_add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,7 +197,7 @@ pub fn compose_labels_from_score(score: &Score) -> Result<Vec<TimedLabel>, Compo
     Ok(labels)
 }
 
-fn compute_note_time_ranges_ns(notes: &[Note], tempo: f64) -> Vec<(u64, u64)> {
+pub(crate) fn compute_note_time_ranges_ns(notes: &[Note], tempo: f64) -> Vec<(u64, u64)> {
     let mut current_ns: u128 = 0;
     let mut ranges = Vec::with_capacity(notes.len());
     for note in notes {

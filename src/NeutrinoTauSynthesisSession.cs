@@ -34,7 +34,7 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
         context.Pitch.RangeModified.Subscribe(OnRangeModified, _subscriptions);
         context.PitchDeviation.RangeModified.Subscribe(OnRangeModified, _subscriptions);
 
-        _dirty = context.Notes.Count > 0;
+        _needsResegment = true;
     }
 
     public string DefaultLyric => "a";
@@ -47,29 +47,21 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
     {
         get
         {
-            if (!TryGetBounds(out var startTime, out var endTime))
+            EnsureResegmented();
+            return _pieces.Select(piece => new SynthesisStatusSegment
             {
-                return [];
-            }
-
-            var status = _failed
-              ? SynthesisSegmentStatus.Failed
-              : _synthesizing
-                ? SynthesisSegmentStatus.Synthesizing
-                : _dirty || !_hasResult
-                  ? SynthesisSegmentStatus.Pending
-                  : SynthesisSegmentStatus.Synthesized;
-            return
-            [
-              new SynthesisStatusSegment
-        {
-          StartTime = startTime,
-          EndTime = endTime,
-          Status = status,
-          Message = _failed ? _error : null,
-          Progress = _synthesizing ? _progress : 0,
-        },
-      ];
+                StartTime = piece.StartTime,
+                EndTime = piece.EndTime,
+                Status = piece.Failed
+                  ? SynthesisSegmentStatus.Failed
+                  : piece.Synthesizing
+                    ? SynthesisSegmentStatus.Synthesizing
+                    : piece.Dirty || piece.AudioSegment == null
+                      ? SynthesisSegmentStatus.Pending
+                      : SynthesisSegmentStatus.Synthesized,
+                Message = piece.Failed ? piece.Error : null,
+                Progress = piece.Synthesizing ? piece.Progress : 0,
+            }).ToList();
         }
     }
 
@@ -78,23 +70,33 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
     public IActionEvent SynthesizedPitchChanged => _synthesizedPitchChanged;
     public IActionEvent StatusChanged => _statusChanged;
 
-    public bool IsContinuation(IVoiceSynthesisNote note) => false;
+    public bool IsContinuation(IVoiceSynthesisNote note)
+    {
+        if (!IsContinuationLyric(note.Lyric.Value))
+        {
+            return false;
+        }
+
+        var current = note;
+        while (true)
+        {
+            var previous = current.Previous;
+            if (previous == null || previous.EndTime.Value < current.StartTime.Value)
+            {
+                return false;
+            }
+            if (!IsContinuationLyric(previous.Lyric.Value))
+            {
+                return true;
+            }
+            current = previous;
+        }
+    }
 
     public SynthesisRange? GetNextPendingSynthesisRange(double startTime, double endTime)
     {
-        if (_disposed || _synthesizing || _failed || !_dirty)
-        {
-            return null;
-        }
-        if (!TryGetBounds(out var synthesisStart, out var synthesisEnd))
-        {
-            return null;
-        }
-        if (synthesisEnd < startTime || synthesisStart > endTime)
-        {
-            return null;
-        }
-        return new SynthesisRange(synthesisStart, synthesisEnd);
+        var piece = FindNextPendingPiece(startTime, endTime);
+        return piece == null ? null : new SynthesisRange(piece.StartTime, piece.EndTime);
     }
 
     public async Task SynthesizeNext(
@@ -102,17 +104,17 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
       double endTime,
       CancellationToken cancellation = default)
     {
-        if (GetNextPendingSynthesisRange(startTime, endTime) == null)
+        var piece = FindNextPendingPiece(startTime, endTime);
+        if (piece == null)
         {
             return;
         }
 
-        var notes = _context.Notes.ToList();
-        var snapshot = _context.GetSnapshot(notes);
+        var snapshot = _context.GetSnapshot(piece.Notes);
         var nativeCancelTokenAddress = CreateNativeCancelToken();
         if (nativeCancelTokenAddress == 0)
         {
-            SetFailed("Failed to create a native cancellation token.");
+            SetFailed(piece, "Failed to create a native cancellation token.");
             return;
         }
 
@@ -121,11 +123,11 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
             _activeCancelToken = nativeCancelTokenAddress;
         }
 
-        _dirty = false;
-        _failed = false;
-        _error = null;
-        _synthesizing = true;
-        _progress = 0;
+        piece.Dirty = false;
+        piece.Failed = false;
+        piece.Error = null;
+        piece.Synthesizing = true;
+        piece.Progress = 0;
         _statusChanged.Invoke();
 
         using var registration = cancellation.Register(
@@ -141,27 +143,26 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
 
             if (_disposed || cancellation.IsCancellationRequested)
             {
-                _dirty = !_disposed && _context.Notes.Count > 0;
+                piece.Dirty = !_disposed;
                 return;
             }
-            if (_dirty)
+            if (_needsResegment || piece.Dirty || !_pieces.Contains(piece))
             {
                 return;
             }
 
-            Publish(response, snapshot);
-            _hasResult = true;
-            _progress = 1;
+            Publish(piece, response, snapshot);
+            piece.Progress = 1;
         }
         catch (Exception ex)
         {
             if (cancellation.IsCancellationRequested)
             {
-                _dirty = !_disposed && _context.Notes.Count > 0;
+                piece.Dirty = !_disposed;
             }
             else
             {
-                SetFailed($"Native synthesis failed: {ex.Message}");
+                SetFailed(piece, $"Native synthesis failed: {ex.Message}");
             }
         }
         finally
@@ -174,7 +175,7 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
                 }
             }
             DestroyNativeToken(nativeCancelTokenAddress);
-            _synthesizing = false;
+            piece.Synthesizing = false;
             if (!_disposed)
             {
                 _statusChanged.Invoke();
@@ -198,8 +199,12 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
                 CancelNativeToken(_activeCancelToken);
             }
         }
-        _audioSegment?.Dispose();
-        _audioSegment = null;
+        foreach (var piece in _pieces)
+        {
+            piece.AudioSegment?.Dispose();
+            piece.AudioSegment = null;
+        }
+        _pieces.Clear();
     }
 
     private unsafe SynthesisResponse RunSynthesis(
@@ -367,29 +372,31 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
           StretchWeight = phoneme.StretchWeight,
       };
 
-    private void Publish(SynthesisResponse response, VoiceSynthesisSnapshot snapshot)
+    private void Publish(
+      SynthesisPiece piece,
+      SynthesisResponse response,
+      VoiceSynthesisSnapshot snapshot)
     {
         if (response.Samples.Length != response.SampleCount)
         {
             throw new InvalidOperationException("Native synthesis returned an invalid sample count.");
         }
 
-        _audioSegment?.Dispose();
-        _audioSegment = _context.CreateAudioSegment(
+        piece.AudioSegment?.Dispose();
+        piece.AudioSegment = _context.CreateAudioSegment(
           (long)(response.StartTime * response.SampleRate),
           response.Samples.Length,
           response.SampleRate
         );
-        _audioSegment.Write(0, response.Samples);
-        _audioSegment.Commit();
+        piece.AudioSegment.Write(0, response.Samples);
+        piece.AudioSegment.Commit();
 
-        _synthesizedPitch = new SynthesizedPitch
-        {
-            Segments = BuildSynthesizedPitch(response.PitchTimes, response.PitchValues),
-        };
-        _synthesizedPhonemes = BuildSynthesizedPhonemes(snapshot.Notes, response.NotePhonemes);
-        _synthesizedPitchChanged.Invoke();
-        _synthesizedPhonemesChanged.Invoke();
+        piece.SynthesizedPitch = BuildSynthesizedPitch(response.PitchTimes, response.PitchValues);
+        piece.SynthesizedPhonemes = BuildSynthesizedPhonemes(
+          snapshot.Notes,
+          response.NotePhonemes
+        );
+        RebuildSynthesizedProducts();
     }
 
     private void MarkDirty()
@@ -399,11 +406,143 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
             return;
         }
 
-        _dirty = _context.Notes.Count > 0;
-        _failed = false;
-        _error = null;
-        _hasResult = false;
+        foreach (var piece in _pieces)
+        {
+            piece.Dirty = true;
+            piece.Failed = false;
+            piece.Error = null;
+        }
+        _needsResegment = true;
+        ClearSynthesizedProducts();
+        _statusChanged.Invoke();
+    }
 
+    private void MarkRangeDirty(double startTime, double endTime)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        EnsureResegmented();
+        var productsChanged = false;
+        foreach (var piece in _pieces)
+        {
+            if (piece.EndTime < startTime || piece.StartTime > endTime)
+            {
+                continue;
+            }
+
+            productsChanged |= !piece.Dirty && piece.AudioSegment != null;
+            piece.Dirty = true;
+            piece.Failed = false;
+            piece.Error = null;
+        }
+        if (productsChanged)
+        {
+            RebuildSynthesizedProducts();
+        }
+        _statusChanged.Invoke();
+    }
+
+    private void OnNoteChanged(IVoiceSynthesisNote note) => MarkDirty();
+    private void OnNotesChanged(IVoiceSynthesisNote note) => MarkDirty();
+    private void OnRangeModified(double startTime, double endTime) =>
+      MarkRangeDirty(startTime, endTime);
+
+    private void SetFailed(SynthesisPiece piece, string error)
+    {
+        piece.Dirty = false;
+        piece.Failed = true;
+        piece.Error = error;
+        _statusChanged.Invoke();
+    }
+
+    private SynthesisPiece? FindNextPendingPiece(double startTime, double endTime)
+    {
+        if (_disposed || _pieces.Any(piece => piece.Synthesizing))
+        {
+            return null;
+        }
+
+        EnsureResegmented();
+        foreach (var piece in _pieces)
+        {
+            if (!piece.Dirty || piece.Failed)
+            {
+                continue;
+            }
+            if (piece.EndTime < startTime || piece.StartTime > endTime)
+            {
+                continue;
+            }
+            return piece;
+        }
+        return null;
+    }
+
+    private void EnsureResegmented()
+    {
+        if (!_needsResegment || _pieces.Any(piece => piece.Synthesizing))
+        {
+            return;
+        }
+
+        _needsResegment = false;
+        var noteGroups = new List<List<IVoiceSynthesisNote>>();
+        List<IVoiceSynthesisNote>? currentGroup = null;
+        var groupEndTime = double.NegativeInfinity;
+        // Use the latest end in the group so overlapping notes do not create a false gap.
+        foreach (var note in _context.Notes)
+        {
+            if (currentGroup == null || note.StartTime.Value > groupEndTime)
+            {
+                currentGroup = [];
+                noteGroups.Add(currentGroup);
+                groupEndTime = note.EndTime.Value;
+            }
+            else
+            {
+                groupEndTime = Math.Max(groupEndTime, note.EndTime.Value);
+            }
+            currentGroup.Add(note);
+        }
+
+        var unmatchedPieces = _pieces.ToList();
+        var newPieces = new List<SynthesisPiece>(noteGroups.Count);
+        foreach (var notes in noteGroups)
+        {
+            var existingPiece = unmatchedPieces.FirstOrDefault(
+              piece => piece.Notes.SequenceEqual(notes)
+            );
+            if (existingPiece != null)
+            {
+                unmatchedPieces.Remove(existingPiece);
+                existingPiece.StartTime = notes[0].StartTime.Value;
+                existingPiece.EndTime = notes.Max(note => note.EndTime.Value);
+                newPieces.Add(existingPiece);
+                continue;
+            }
+
+            newPieces.Add(new SynthesisPiece
+            {
+                Notes = notes,
+                StartTime = notes[0].StartTime.Value,
+                EndTime = notes.Max(note => note.EndTime.Value),
+                Dirty = true,
+            });
+        }
+
+        foreach (var piece in unmatchedPieces)
+        {
+            piece.AudioSegment?.Dispose();
+        }
+        _pieces.Clear();
+        _pieces.AddRange(newPieces);
+    }
+
+    private void ClearSynthesizedProducts()
+    {
         if (_synthesizedPitch.Segments.Count > 0)
         {
             _synthesizedPitch = EmptySynthesizedPitch;
@@ -414,36 +553,30 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
             _synthesizedPhonemes = Map<string, SynthesizedSyllable>.Empty;
             _synthesizedPhonemesChanged.Invoke();
         }
-        if (!_dirty)
-        {
-            _audioSegment?.Dispose();
-            _audioSegment = null;
-        }
-        _statusChanged.Invoke();
     }
 
-    private void OnNoteChanged(IVoiceSynthesisNote note) => MarkDirty();
-    private void OnNotesChanged(IVoiceSynthesisNote note) => MarkDirty();
-    private void OnRangeModified(double startTime, double endTime) => MarkDirty();
-
-    private void SetFailed(string error)
+    private void RebuildSynthesizedProducts()
     {
-        _dirty = false;
-        _failed = true;
-        _error = error;
-        _statusChanged.Invoke();
-    }
-
-    private bool TryGetBounds(out double startTime, out double endTime)
-    {
-        startTime = double.PositiveInfinity;
-        endTime = double.NegativeInfinity;
-        foreach (var note in _context.Notes)
+        var pitchSegments = new List<IReadOnlyList<Point>>();
+        var phonemes = new Map<string, SynthesizedSyllable>();
+        foreach (var piece in _pieces)
         {
-            startTime = Math.Min(startTime, note.StartTime.Value);
-            endTime = Math.Max(endTime, note.EndTime.Value);
+            if (piece.Dirty || piece.Failed || piece.AudioSegment == null)
+            {
+                continue;
+            }
+
+            pitchSegments.AddRange(piece.SynthesizedPitch);
+            foreach (var entry in piece.SynthesizedPhonemes)
+            {
+                phonemes.Add(entry.Key, entry.Value);
+            }
         }
-        return double.IsFinite(startTime) && double.IsFinite(endTime);
+
+        _synthesizedPitch = new SynthesizedPitch { Segments = pitchSegments };
+        _synthesizedPhonemes = phonemes;
+        _synthesizedPitchChanged.Invoke();
+        _synthesizedPhonemesChanged.Invoke();
     }
 
     private static List<double> CollectPitchTimes(double startTime, double endTime)
@@ -552,6 +685,8 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
         return roundToInteger ? Math.Round(value, MidpointRounding.AwayFromZero) : value;
     }
 
+    private static bool IsContinuationLyric(string lyric) => lyric is "ー" or "-";
+
     private static IReadOnlyList<IReadOnlyList<Point>> BuildSynthesizedPitch(
       IReadOnlyList<double> pitchTimes,
       IReadOnlyList<double> pitchValues)
@@ -645,6 +780,22 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
         return result;
     }
 
+    private sealed class SynthesisPiece
+    {
+        public required IReadOnlyList<IVoiceSynthesisNote> Notes { get; init; }
+        public double StartTime { get; set; }
+        public double EndTime { get; set; }
+        public bool Dirty { get; set; }
+        public bool Failed { get; set; }
+        public bool Synthesizing { get; set; }
+        public string? Error { get; set; }
+        public double Progress { get; set; }
+        public IAudioSegment? AudioSegment { get; set; }
+        public IReadOnlyList<IReadOnlyList<Point>> SynthesizedPitch { get; set; } = [];
+        public IReadOnlyMap<string, SynthesizedSyllable> SynthesizedPhonemes { get; set; } =
+          Map<string, SynthesizedSyllable>.Empty;
+    }
+
     private sealed class SynthesisTaskPayload
     {
         public required string VoiceId { get; init; }
@@ -718,17 +869,12 @@ internal sealed class NeutrinoTauSynthesisSession : IVoiceSynthesisSession
     private readonly ActionEvent _synthesizedPhonemesChanged = new();
     private readonly ActionEvent _synthesizedPitchChanged = new();
     private readonly ActionEvent _statusChanged = new();
+    private readonly List<SynthesisPiece> _pieces = [];
 
     private SynthesizedPitch _synthesizedPitch = EmptySynthesizedPitch;
     private IReadOnlyMap<string, SynthesizedSyllable> _synthesizedPhonemes =
       Map<string, SynthesizedSyllable>.Empty;
-    private IAudioSegment? _audioSegment;
     private nint _activeCancelToken;
-    private bool _dirty;
-    private bool _failed;
-    private bool _synthesizing;
-    private bool _hasResult;
+    private bool _needsResegment;
     private bool _disposed;
-    private string? _error;
-    private double _progress;
 }

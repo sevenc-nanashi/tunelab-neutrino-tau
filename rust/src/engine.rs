@@ -141,28 +141,44 @@ impl Engine {
         synthesis_task_json: &str,
         cancel_token: &Arc<AtomicBool>,
     ) -> anyhow::Result<String> {
-        self.log_info(&format!(
+        info!(
             "Starting synthesis. payload_bytes={}",
             synthesis_task_json.len()
-        ));
-        let (payload, score, tunelab_start_in_synthesis_time) =
+        );
+        let (payload, prepared_scores, tunelab_start_in_synthesis_time) =
             Self::prepare_synthesis_input(synthesis_task_json).inspect_err(|e| {
-                self.log_error(&format!("Failed to prepare synthesis input: {}", e));
+                error!("Failed to prepare synthesis input: {}", e);
             })?;
 
-        let timings = self.synthesize_timing(&payload.voice_id, &score, cancel_token)?;
-        let mapped_phoneme_groups = self.map_phonemes_to_notes(&score, &timings)?;
-        let merged_phonemes = Self::merge_phonemes_with_payload(
+        let timings = self.synthesize_timing(
+            &payload.voice_id,
+            &prepared_scores.waveform_score,
+            cancel_token,
+        )?;
+        let mapped_phoneme_groups =
+            self.map_phonemes_to_notes(&prepared_scores.waveform_score, &timings)?;
+        let waveform_phoneme_groups = Self::merge_phonemes_with_payload(
             &payload,
+            &prepared_scores,
             &mapped_phoneme_groups,
             tunelab_start_in_synthesis_time,
-        );
+        )?;
+        let waveform_phonemes = waveform_phoneme_groups
+            .iter()
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>();
+        let f0_phonemes = Self::build_f0_phonemes(&prepared_scores, &waveform_phoneme_groups)?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
-        let style_score = Self::transpose_score_pitches(&score, payload.style_shift);
+        let style_f0_score =
+            Self::transpose_score_pitches(&prepared_scores.f0_score, payload.style_shift);
         let inferred_f0_values = self.synthesize_f0(
             &payload.voice_id,
-            &style_score,
-            &merged_phonemes,
+            &style_f0_score,
+            &f0_phonemes,
             cancel_token,
         )?;
         // Infer f0 on style-shifted notes, then shift f0 back to the original key.
@@ -176,20 +192,21 @@ impl Engine {
         let shifted_mapped_f0_values =
             Self::shift_f0_by_cents(&mapped_f0_values, payload.pitch_shift_cents);
 
+        let style_waveform_score =
+            Self::transpose_score_pitches(&prepared_scores.waveform_score, payload.style_shift);
         let waveform_score =
-            Self::transpose_score_pitches(&style_score, payload.waveform_style_shift);
+            Self::transpose_score_pitches(&style_waveform_score, payload.waveform_style_shift);
         let wav_data = self.synthesize_waveform(
             &payload.voice_id,
             &waveform_score,
-            &merged_phonemes,
+            &waveform_phonemes,
             &shifted_mapped_f0_values,
             cancel_token,
         )?;
         let response = Self::build_synthesis_response(
             &payload,
             &shifted_mapped_f0_values,
-            &mapped_phoneme_groups,
-            &merged_phonemes,
+            &waveform_phoneme_groups,
             wav_data,
             tunelab_start_in_synthesis_time,
         );
@@ -203,14 +220,6 @@ impl Engine {
 
     fn build_log_path(dll_path: &Path) -> PathBuf {
         dll_path.join(LOG_FILE_NAME)
-    }
-
-    pub fn log_info(&self, message: &str) {
-        info!("{}", message);
-    }
-
-    pub fn log_error(&self, message: &str) {
-        error!("{}", message);
     }
 
     fn transpose_score_pitches(
@@ -263,54 +272,134 @@ impl Engine {
         synthesis_task_json: &str,
     ) -> anyhow::Result<(
         crate::synthesizer::SynthesisTaskPayload,
-        crate::neutrino_score::Score,
+        crate::synthesizer::PreparedScores,
         f64,
     )> {
         let payload =
             serde_json::from_str::<crate::synthesizer::SynthesisTaskPayload>(synthesis_task_json)
                 .map_err(|e| anyhow::anyhow!("Failed to parse synthesis task payload: {}", e))?;
-        let score = crate::synthesizer::task_notes_to_score(&payload.notes)?;
+        let prepared_scores = crate::synthesizer::prepare_scores(&payload.notes)?;
         let tunelab_start_in_synthesis_time =
-            (score.notes[1].start_time_ns as f64 / 1e9) - payload.notes[0].start_time;
-        Ok((payload, score, tunelab_start_in_synthesis_time))
+            (prepared_scores.f0_score.notes[1].start_time_ns as f64 / 1e9)
+                - payload.notes[0].start_time;
+        Ok((payload, prepared_scores, tunelab_start_in_synthesis_time))
     }
 
     fn merge_phonemes_with_payload(
         payload: &crate::synthesizer::SynthesisTaskPayload,
+        prepared_scores: &crate::synthesizer::PreparedScores,
         mapped_phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
         tunelab_start_in_synthesis_time: f64,
-    ) -> Vec<crate::synthesizer::TimingLabel> {
-        let mut merged_phonemes =
-            Vec::with_capacity(payload.notes.iter().map(|n| n.phonemes.len()).sum());
-
-        // NOTE: pauが最初と最後にあるのでNoneではさむ
-        for (synthesized_phonemes, note) in mapped_phoneme_groups.iter().zip(
-            std::iter::once(None)
-                .chain(payload.notes.iter().map(Some))
-                .chain(std::iter::once(None)),
-        ) {
-            match note {
-                Some(note) => {
-                    if note.phonemes.len() != synthesized_phonemes.len() {
-                        merged_phonemes.extend(synthesized_phonemes.iter().cloned());
-                    } else {
-                        for phoneme in &note.phonemes {
-                            merged_phonemes.push(crate::synthesizer::TimingLabel {
-                                start_time_ns: ((tunelab_start_in_synthesis_time
-                                    + phoneme.start_time)
-                                    * 1e9) as u64,
-                                end_time_ns: ((tunelab_start_in_synthesis_time + phoneme.end_time)
-                                    * 1e9) as u64,
-                                phoneme: phoneme.symbol.clone(),
-                            });
-                        }
-                    }
-                }
-                None => merged_phonemes.extend(synthesized_phonemes.iter().cloned()),
-            }
+    ) -> anyhow::Result<Vec<Vec<crate::synthesizer::TimingLabel>>> {
+        if mapped_phoneme_groups.len() != prepared_scores.waveform_note_indices.len() + 2 {
+            anyhow::bail!("Waveform timing groups do not match the prepared score");
         }
 
-        merged_phonemes
+        let mut merged_phoneme_groups = vec![Vec::new(); payload.notes.len() + 2];
+        merged_phoneme_groups[0] = mapped_phoneme_groups[0].clone();
+        merged_phoneme_groups[payload.notes.len() + 1] = mapped_phoneme_groups
+            .last()
+            .expect("prepared score must contain a trailing pause")
+            .clone();
+
+        for (waveform_note_index, &payload_note_index) in
+            prepared_scores.waveform_note_indices.iter().enumerate()
+        {
+            let synthesized_phonemes = &mapped_phoneme_groups[waveform_note_index + 1];
+            let note = &payload.notes[payload_note_index];
+            let mut merged = if note.phonemes.len() != synthesized_phonemes.len() {
+                synthesized_phonemes.clone()
+            } else {
+                note.phonemes
+                    .iter()
+                    .map(|phoneme| crate::synthesizer::TimingLabel {
+                        start_time_ns: ((tunelab_start_in_synthesis_time + phoneme.start_time)
+                            * 1e9) as u64,
+                        end_time_ns: ((tunelab_start_in_synthesis_time + phoneme.end_time) * 1e9)
+                            as u64,
+                        phoneme: phoneme.symbol.clone(),
+                    })
+                    .collect()
+            };
+
+            if prepared_scores
+                .continuations
+                .iter()
+                .flatten()
+                .any(|continuation| continuation.head_note_index == payload_note_index)
+            {
+                let inferred_end = synthesized_phonemes
+                    .last()
+                    .ok_or_else(|| anyhow::anyhow!("Continuation head has no timing phonemes"))?
+                    .end_time_ns;
+                let final_phoneme = merged
+                    .last_mut()
+                    .ok_or_else(|| anyhow::anyhow!("Continuation head has no merged phonemes"))?;
+                final_phoneme.end_time_ns = inferred_end;
+            }
+
+            merged_phoneme_groups[payload_note_index + 1] = merged;
+        }
+
+        Ok(merged_phoneme_groups)
+    }
+
+    fn build_f0_phonemes(
+        prepared_scores: &crate::synthesizer::PreparedScores,
+        waveform_phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
+    ) -> anyhow::Result<Vec<Vec<crate::synthesizer::TimingLabel>>> {
+        if waveform_phoneme_groups.len() != prepared_scores.continuations.len() + 2 {
+            anyhow::bail!("Waveform phoneme groups do not match the synthesis payload");
+        }
+
+        let note_ranges = crate::neutrino_score::compute_note_time_ranges_ns(
+            &prepared_scores.f0_score.notes,
+            prepared_scores.f0_score.tempo,
+        );
+        let mut f0_phoneme_groups = waveform_phoneme_groups.to_vec();
+        let mut split_heads = std::collections::HashSet::new();
+        let mut head_end_times = std::collections::HashMap::new();
+        let mut last_continuations = std::collections::HashMap::new();
+
+        for (note_index, continuation) in prepared_scores.continuations.iter().enumerate() {
+            let Some(continuation) = continuation else {
+                continue;
+            };
+            let (start_time_ns, end_time_ns) = note_ranges[note_index + 1];
+            if split_heads.insert(continuation.head_note_index) {
+                let head_phoneme = f0_phoneme_groups[continuation.head_note_index + 1]
+                    .last_mut()
+                    .ok_or_else(|| anyhow::anyhow!("Continuation head has no phonemes"))?;
+                if start_time_ns < head_phoneme.start_time_ns {
+                    anyhow::bail!(
+                        "Continuation at index {} starts before the head phoneme",
+                        note_index
+                    );
+                }
+                head_end_times.insert(continuation.head_note_index, head_phoneme.end_time_ns);
+                head_phoneme.end_time_ns = start_time_ns;
+            }
+            f0_phoneme_groups[note_index + 1] = vec![crate::synthesizer::TimingLabel {
+                start_time_ns,
+                end_time_ns,
+                phoneme: continuation.phoneme.clone(),
+            }];
+            last_continuations.insert(continuation.head_note_index, note_index);
+        }
+
+        for (head_note_index, continuation_note_index) in last_continuations {
+            let inferred_end = head_end_times[&head_note_index];
+            let continuation_phoneme = &mut f0_phoneme_groups[continuation_note_index + 1][0];
+            if inferred_end < continuation_phoneme.start_time_ns {
+                anyhow::bail!(
+                    "Continuation at index {} ends before its phoneme starts",
+                    continuation_note_index
+                );
+            }
+            continuation_phoneme.end_time_ns = inferred_end;
+        }
+
+        Ok(f0_phoneme_groups)
     }
 
     fn apply_payload_pitch_to_f0(
@@ -363,26 +452,20 @@ impl Engine {
     }
 
     fn build_note_phonemes(
-        mapped_phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
-        merged_phonemes: &[crate::synthesizer::TimingLabel],
+        phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
         tunelab_start_in_synthesis_time: f64,
     ) -> Vec<crate::synthesizer::NotePhonemes> {
-        let mut merged_iter = merged_phonemes.iter();
-        mapped_phoneme_groups
+        phoneme_groups
             .iter()
             .enumerate()
-            .filter_map(|(i, group)| {
-                let current_group = group
-                    .iter()
-                    .filter_map(|_| merged_iter.next())
-                    .collect::<Vec<_>>();
-                if i == 0 || i == mapped_phoneme_groups.len() - 1 {
+            .filter_map(|(i, phonemes)| {
+                if i == 0 || i == phoneme_groups.len() - 1 {
                     // 最初と最後のグループはpauなのでスキップ
                     None
                 } else {
                     Some(crate::synthesizer::NotePhonemes {
                         note_index: i - 1,
-                        phonemes: current_group
+                        phonemes: phonemes
                             .iter()
                             .map(|p| crate::synthesizer::SynthesizedPhoneme {
                                 start_time: (p.start_time_ns as f64) / 1e9
@@ -401,8 +484,7 @@ impl Engine {
     fn build_synthesis_response(
         payload: &crate::synthesizer::SynthesisTaskPayload,
         f0_values: &[f32],
-        mapped_phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
-        merged_phonemes: &[crate::synthesizer::TimingLabel],
+        phoneme_groups: &[Vec<crate::synthesizer::TimingLabel>],
         wav_data: WavData,
         tunelab_start_in_synthesis_time: f64,
     ) -> crate::synthesizer::SynthesisResponse {
@@ -450,12 +532,11 @@ impl Engine {
                 .filter_map(|(&midi, &skipped)| if skipped { None } else { Some(midi) })
                 .collect(),
             note_phonemes: Self::build_note_phonemes(
-                mapped_phoneme_groups,
-                merged_phonemes,
+                phoneme_groups,
                 tunelab_start_in_synthesis_time,
             ),
             note_count: payload.notes.len(),
-            phoneme_count: merged_phonemes.len(),
+            phoneme_count: phoneme_groups.iter().map(Vec::len).sum(),
             property_count: 0, // 今のところプロパティは返さない
         }
     }
@@ -614,10 +695,11 @@ impl Engine {
         let f0_data = std::fs::read(&f0_path)
             .map_err(|e| anyhow::anyhow!("Failed to read generated f0 file: {}", e))?;
         let f0_values = f0_data
-            .chunks_exact(4)
-            .map(|chunk| {
-                let bytes = [chunk[0], chunk[1], chunk[2], chunk[3]];
-                f32::from_le_bytes(bytes)
+            .as_chunks::<4>()
+            .0
+            .into_iter()
+            .map(|bytes| {
+                f32::from_le_bytes(*bytes)
             })
             .collect();
         Ok(f0_values)
@@ -924,4 +1006,85 @@ fn init_logger(dll_path: &Path) {
 
         let _ = builder.try_init();
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(
+        start_time: f64,
+        end_time: f64,
+        pitch: i32,
+        lyric: &str,
+    ) -> crate::synthesizer::SynthesisNotePayload {
+        crate::synthesizer::SynthesisNotePayload {
+            start_time,
+            end_time,
+            pitch,
+            lyric: lyric.to_string(),
+            last_index: None,
+            next_index: None,
+            properties: std::collections::HashMap::new(),
+            phonemes: Vec::new(),
+        }
+    }
+
+    fn timing(
+        start_time_ns: u64,
+        end_time_ns: u64,
+        phoneme: &str,
+    ) -> crate::synthesizer::TimingLabel {
+        crate::synthesizer::TimingLabel {
+            start_time_ns,
+            end_time_ns,
+            phoneme: phoneme.to_string(),
+        }
+    }
+
+    #[test]
+    fn expands_only_f0_phonemes_at_continuation_boundaries() {
+        let prepared_scores = crate::synthesizer::prepare_scores(&[
+            note(0.0, 0.5, 60, "さ"),
+            note(0.5, 1.0, 72, "ー"),
+        ])
+        .expect("continuation should be prepared");
+        let waveform_groups = vec![
+            vec![timing(0, 1_000_000_000, "pau")],
+            vec![
+                timing(1_000_000_000, 1_100_000_000, "s"),
+                timing(1_100_000_000, 1_950_000_000, "a"),
+            ],
+            Vec::new(),
+            vec![timing(1_950_000_000, 3_000_000_000, "pau")],
+        ];
+
+        let f0_groups = Engine::build_f0_phonemes(&prepared_scores, &waveform_groups)
+            .expect("f0 phonemes should be expanded");
+
+        assert_eq!(
+            crate::neutrino_score::compose_labels_from_score(&prepared_scores.f0_score)
+                .expect("f0 labels should be composed")
+                .len(),
+            f0_groups.iter().map(Vec::len).sum::<usize>()
+        );
+        assert_eq!(
+            crate::neutrino_score::compose_labels_from_score(&prepared_scores.waveform_score)
+                .expect("waveform labels should be composed")
+                .len(),
+            waveform_groups.iter().map(Vec::len).sum::<usize>()
+        );
+        assert_eq!(f0_groups[1][1].start_time_ns, 1_100_000_000);
+        assert_eq!(f0_groups[1][1].end_time_ns, 1_500_000_000);
+        assert_eq!(f0_groups[2].len(), 1);
+        assert_eq!(f0_groups[2][0].phoneme, "a");
+        assert_eq!(f0_groups[2][0].start_time_ns, 1_500_000_000);
+        assert_eq!(f0_groups[2][0].end_time_ns, 1_950_000_000);
+
+        let response_groups = Engine::build_note_phonemes(&waveform_groups, 1.0);
+        assert_eq!(response_groups.len(), 2);
+        assert_eq!(response_groups[0].phonemes.len(), 2);
+        assert_eq!(response_groups[0].phonemes[1].end_time, 0.95);
+        assert!(response_groups[1].phonemes.is_empty());
+    }
 }

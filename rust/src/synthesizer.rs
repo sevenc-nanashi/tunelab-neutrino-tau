@@ -78,6 +78,20 @@ pub struct NotePhonemes {
     pub phonemes: Vec<SynthesizedPhoneme>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Continuation {
+    pub head_note_index: usize,
+    pub phoneme: String,
+}
+
+#[derive(Debug)]
+pub struct PreparedScores {
+    pub f0_score: crate::neutrino_score::Score,
+    pub waveform_score: crate::neutrino_score::Score,
+    pub continuations: Vec<Option<Continuation>>,
+    pub waveform_note_indices: Vec<usize>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct LooseF64(pub f64);
 
@@ -296,9 +310,7 @@ pub fn mora_to_phonemes(mora: &str) -> anyhow::Result<Vec<String>> {
     })
 }
 
-pub fn task_notes_to_score(
-    notes: &[SynthesisNotePayload],
-) -> anyhow::Result<crate::neutrino_score::Score> {
+pub fn prepare_scores(notes: &[SynthesisNotePayload]) -> anyhow::Result<PreparedScores> {
     if notes.is_empty() {
         anyhow::bail!("No notes provided in synthesis task payload");
     }
@@ -306,10 +318,13 @@ pub fn task_notes_to_score(
     // Until tempo is provided by payload, use `bpm = 60000` to interpret note lengths as
     // milliseconds.
     let bpm = 60000.0;
-    let mut score = crate::neutrino_score::Score {
+    let mut f0_score = crate::neutrino_score::Score {
         tempo: bpm,
         ..Default::default()
     };
+    let mut waveform_score = f0_score.clone();
+    let mut continuations = vec![None; notes.len()];
+    let mut waveform_note_indices = Vec::with_capacity(notes.len());
 
     let first_pau = crate::neutrino_score::Note {
         pitch: None,
@@ -320,44 +335,118 @@ pub fn task_notes_to_score(
         phonemes: vec!["pau".to_string()],
     };
     let first_pau_length_ns = first_pau.length.to_nanoseconds(bpm);
-    score.notes.push(first_pau);
+    f0_score.notes.push(first_pau.clone());
+    waveform_score.notes.push(first_pau);
     let first_note_start_time = notes[0].start_time;
-    for note in notes {
+    let mut last_sustainable_phoneme: Option<(usize, String)> = None;
+    for (note_index, note) in notes.iter().enumerate() {
+        let start_time_ns = ((note.start_time - first_note_start_time).max(0.0) * 1_000_000_000.0)
+            .round() as u64
+            + first_pau_length_ns;
+        let length = crate::neutrino_score::NoteLength::from_4th_note_float(
+            (note.end_time - note.start_time).max(0.0) * (bpm / 60.0),
+        );
+
+        if is_continuation_lyric(&note.lyric) {
+            if note_index == 0 {
+                anyhow::bail!("Continuation note at index 0 has no previous note");
+            }
+            let previous_note = &notes[note_index - 1];
+            if previous_note.end_time < note.start_time {
+                anyhow::bail!(
+                    "Continuation note at index {} is separated from the previous note",
+                    note_index
+                );
+            }
+        }
+
+        if is_continuation_lyric(&note.lyric) {
+            let Some((head_note_index, phoneme)) = last_sustainable_phoneme.clone() else {
+                anyhow::bail!(
+                    "Note before continuation at index {} does not end in a sustainable phoneme",
+                    note_index
+                );
+            };
+
+            f0_score.notes.push(crate::neutrino_score::Note {
+                pitch: Some(note.pitch.clamp(0, 127) as u8),
+                start_time_ns,
+                length,
+                phonemes: vec![phoneme.clone()],
+                language: Some("JPN".to_string()),
+                language_dependent_context: Some("0".to_string()),
+            });
+            let waveform_head = waveform_score
+                .notes
+                .last_mut()
+                .expect("waveform score must contain a continuation head");
+            waveform_head.length = waveform_head.length.saturating_add(length);
+            continuations[note_index] = Some(Continuation {
+                head_note_index,
+                phoneme,
+            });
+            continue;
+        }
+
         let phonemes: Vec<String> = if note.phonemes.is_empty() {
             mora_to_phonemes(&note.lyric)?
         } else {
             note.phonemes.iter().map(|p| p.symbol.clone()).collect()
         };
+        last_sustainable_phoneme = phonemes
+            .last()
+            .filter(|phoneme| is_sustainable_phoneme(phoneme))
+            .map(|phoneme| (note_index, phoneme.clone()));
 
-        let start_time_ns = ((note.start_time - first_note_start_time).max(0.0) * 1_000_000_000.0)
-            .round() as u64
-            + first_pau_length_ns;
-
-        score.notes.push(crate::neutrino_score::Note {
+        let score_note = crate::neutrino_score::Note {
             pitch: Some(note.pitch.clamp(0, 127) as u8),
             start_time_ns,
-            length: crate::neutrino_score::NoteLength::from_4th_note_float(
-                (note.end_time - note.start_time).max(0.0) * (bpm / 60.0),
-            ),
+            length,
             phonemes,
             language: Some("JPN".to_string()),
             language_dependent_context: Some("0".to_string()),
-        });
+        };
+        f0_score.notes.push(score_note.clone());
+        waveform_score.notes.push(score_note);
+        waveform_note_indices.push(note_index);
     }
-    score.notes.push(crate::neutrino_score::Note {
-        pitch: None,
-        start_time_ns: score
+
+    let score_end_time_ns = |score: &crate::neutrino_score::Score| {
+        let last_note = score
             .notes
             .last()
-            .map(|n| n.start_time_ns + n.length.to_nanoseconds(bpm))
-            .unwrap_or(0),
+            .expect("score must contain a content note");
+        last_note.start_time_ns + last_note.length.to_nanoseconds(bpm)
+    };
+    let f0_end_time_ns = score_end_time_ns(&f0_score);
+    let waveform_end_time_ns = score_end_time_ns(&waveform_score);
+    let trailing_pau = |start_time_ns| crate::neutrino_score::Note {
+        pitch: None,
+        start_time_ns,
         length: crate::neutrino_score::NoteLength::from_seconds_float(1.0, bpm),
         phonemes: vec!["pau".to_string()],
         language: Some("JPN".to_string()),
         language_dependent_context: Some("p".to_string()),
-    });
+    };
+    f0_score.notes.push(trailing_pau(f0_end_time_ns));
+    waveform_score
+        .notes
+        .push(trailing_pau(waveform_end_time_ns));
 
-    Ok(score)
+    Ok(PreparedScores {
+        f0_score,
+        waveform_score,
+        continuations,
+        waveform_note_indices,
+    })
+}
+
+pub fn is_continuation_lyric(lyric: &str) -> bool {
+    matches!(lyric, "ー" | "-")
+}
+
+fn is_sustainable_phoneme(phoneme: &str) -> bool {
+    matches!(phoneme, "a" | "i" | "u" | "e" | "o" | "N")
 }
 
 #[derive(Debug, Clone)]
@@ -402,9 +491,132 @@ pub fn midi_to_freq(midi: f32) -> f32 {
 mod tests {
     use super::*;
 
+    fn note(start_time: f64, end_time: f64, pitch: i32, lyric: &str) -> SynthesisNotePayload {
+        note_with_phonemes(start_time, end_time, pitch, lyric, &[])
+    }
+
+    fn note_with_phonemes(
+        start_time: f64,
+        end_time: f64,
+        pitch: i32,
+        lyric: &str,
+        phonemes: &[&str],
+    ) -> SynthesisNotePayload {
+        SynthesisNotePayload {
+            start_time,
+            end_time,
+            pitch,
+            lyric: lyric.to_string(),
+            last_index: None,
+            next_index: None,
+            properties: std::collections::HashMap::new(),
+            phonemes: phonemes
+                .iter()
+                .map(|symbol| SynthesisPhonemePayload {
+                    symbol: symbol.to_string(),
+                    start_time,
+                    end_time,
+                })
+                .collect(),
+        }
+    }
+
     #[test]
     fn loose_f64_treats_negative_max_as_nan() {
         let v: LooseF64 = serde_json::from_str("-1.7976931348623157e308").expect("must parse");
         assert!(!v.is_finite());
+    }
+
+    #[test]
+    fn prepares_vowel_continuation_for_f0_and_collapses_waveform_score() {
+        let prepared = prepare_scores(&[note(0.0, 0.5, 60, "さ"), note(0.5, 1.0, 72, "ー")])
+            .expect("continuation should be prepared");
+
+        assert_eq!(prepared.f0_score.notes.len(), 4);
+        assert_eq!(prepared.f0_score.notes[1].phonemes, ["s", "a"]);
+        assert_eq!(prepared.f0_score.notes[2].phonemes, ["a"]);
+        assert_eq!(prepared.f0_score.notes[2].pitch, Some(72));
+        assert_eq!(prepared.waveform_score.notes.len(), 3);
+        assert_eq!(prepared.waveform_score.notes[1].phonemes, ["s", "a"]);
+        assert_eq!(
+            prepared.waveform_score.notes[1]
+                .length
+                .to_nanoseconds(prepared.waveform_score.tempo),
+            1_000_000_000
+        );
+        assert_eq!(prepared.waveform_note_indices, [0]);
+        assert_eq!(
+            prepared.continuations[1],
+            Some(Continuation {
+                head_note_index: 0,
+                phoneme: "a".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn prepares_nasal_and_consecutive_continuations() {
+        let prepared = prepare_scores(&[
+            note(0.0, 0.5, 60, "ん"),
+            note_with_phonemes(0.5, 1.0, 62, "-", &["cl"]),
+            note(1.0, 1.5, 64, "ー"),
+        ])
+        .expect("nasal continuations should be prepared");
+
+        assert_eq!(prepared.f0_score.notes[1].phonemes, ["N"]);
+        assert_eq!(prepared.f0_score.notes[2].phonemes, ["N"]);
+        assert_eq!(prepared.f0_score.notes[3].phonemes, ["N"]);
+        assert_eq!(prepared.waveform_score.notes.len(), 3);
+        assert_eq!(prepared.waveform_score.notes[1].phonemes, ["N"]);
+        assert_eq!(
+            prepared.waveform_score.notes[1]
+                .length
+                .to_nanoseconds(prepared.waveform_score.tempo),
+            1_500_000_000
+        );
+        assert_eq!(prepared.waveform_note_indices, [0]);
+        assert_eq!(
+            prepared
+                .continuations
+                .iter()
+                .flatten()
+                .map(|continuation| continuation.head_note_index)
+                .collect::<Vec<_>>(),
+            [0, 0]
+        );
+    }
+
+    #[test]
+    fn preserves_pinned_phonemes_on_the_continuation_head() {
+        let prepared = prepare_scores(&[
+            note_with_phonemes(0.0, 0.5, 60, "custom", &["sh", "i"]),
+            note(0.5, 1.0, 62, "ー"),
+        ])
+        .expect("pinned head should be prepared");
+
+        assert_eq!(prepared.f0_score.notes[1].phonemes, ["sh", "i"]);
+        assert_eq!(prepared.f0_score.notes[2].phonemes, ["i"]);
+        assert_eq!(prepared.waveform_score.notes[1].phonemes, ["sh", "i"]);
+    }
+
+    #[test]
+    fn rejects_an_orphan_continuation() {
+        let error =
+            prepare_scores(&[note(0.0, 0.5, 60, "ー")]).expect_err("orphan continuation must fail");
+        assert!(error.to_string().contains("has no previous note"));
+    }
+
+    #[test]
+    fn rejects_a_continuation_after_a_gap() {
+        let error = prepare_scores(&[note(0.0, 0.5, 60, "さ"), note(0.6, 1.0, 62, "ー")])
+            .expect_err("continuation after a gap must fail");
+        assert!(error.to_string().contains("is separated"));
+    }
+
+    #[test]
+    fn rejects_a_continuation_after_an_unsustainable_phoneme() {
+        let error = prepare_scores(&[note(0.0, 0.5, 60, "っ"), note(0.5, 1.0, 62, "ー")])
+            .expect_err("continuation after cl must fail");
+        assert!(error.to_string().contains("does not end"));
     }
 }
