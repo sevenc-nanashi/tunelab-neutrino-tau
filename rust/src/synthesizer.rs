@@ -162,7 +162,7 @@ static PHONEMES: &[&str] = &[
     "y", "my", "r", "ry", "w", "gy", "j", "g", "by", "z", "py", "d", "v", "b", "p", "dy", "N",
     "cl", "br", "pau", "sil",
 ];
-pub fn mora_to_phonemes(mora: &str) -> anyhow::Result<Vec<String>> {
+fn single_mora_to_phonemes(mora: &str) -> anyhow::Result<Vec<String>> {
     Ok(match mora.to_katakana().as_str() {
         "ア" => vec!["a".to_string()],
         "イ" => vec!["i".to_string()],
@@ -310,6 +310,63 @@ pub fn mora_to_phonemes(mora: &str) -> anyhow::Result<Vec<String>> {
     })
 }
 
+pub fn mora_to_phonemes(lyric: &str) -> anyhow::Result<Vec<String>> {
+    if !lyric.contains(['\'', '’']) {
+        return single_mora_to_phonemes(lyric);
+    }
+
+    let mut phonemes = Vec::new();
+    let mut segment_start = 0;
+    for (index, apostrophe) in lyric
+        .char_indices()
+        .filter(|(_, character)| matches!(character, '\'' | '’'))
+    {
+        let mut segment = lyric_segment_to_phonemes(&lyric[segment_start..index])?;
+        if !segment
+            .last()
+            .is_some_and(|phoneme| is_vowel_phoneme(phoneme))
+        {
+            anyhow::bail!("Vowel deletion must follow a mora ending in a vowel: {lyric}");
+        }
+        segment.pop();
+        phonemes.extend(segment);
+        segment_start = index + apostrophe.len_utf8();
+    }
+    if segment_start < lyric.len() {
+        phonemes.extend(lyric_segment_to_phonemes(&lyric[segment_start..])?);
+    }
+
+    if !phonemes.iter().any(|phoneme| is_vowel_phoneme(phoneme)) {
+        anyhow::bail!("A note using vowel deletion must contain a vowel: {lyric}");
+    }
+    Ok(phonemes)
+}
+
+fn lyric_segment_to_phonemes(segment: &str) -> anyhow::Result<Vec<String>> {
+    if segment.is_empty() {
+        anyhow::bail!("Vowel deletion requires a preceding mora");
+    }
+
+    let mut remaining = segment;
+    let mut phonemes = Vec::new();
+    while !remaining.is_empty() {
+        let match_result = (1..=remaining.len())
+            .rev()
+            .filter(|end| remaining.is_char_boundary(*end))
+            .find_map(|end| {
+                single_mora_to_phonemes(&remaining[..end])
+                    .ok()
+                    .map(|p| (end, p))
+            });
+        let Some((end, mora_phonemes)) = match_result else {
+            anyhow::bail!("Unsupported mora: {remaining}");
+        };
+        phonemes.extend(mora_phonemes);
+        remaining = &remaining[end..];
+    }
+    Ok(phonemes)
+}
+
 pub fn prepare_scores(notes: &[SynthesisNotePayload]) -> anyhow::Result<PreparedScores> {
     if notes.is_empty() {
         anyhow::bail!("No notes provided in synthesis task payload");
@@ -446,7 +503,11 @@ pub fn is_continuation_lyric(lyric: &str) -> bool {
 }
 
 fn is_sustainable_phoneme(phoneme: &str) -> bool {
-    matches!(phoneme, "a" | "i" | "u" | "e" | "o" | "N")
+    is_vowel_phoneme(phoneme) || phoneme == "N"
+}
+
+fn is_vowel_phoneme(phoneme: &str) -> bool {
+    matches!(phoneme, "a" | "i" | "u" | "e" | "o")
 }
 
 #[derive(Debug, Clone)]
@@ -525,6 +586,18 @@ mod tests {
     fn loose_f64_treats_negative_max_as_nan() {
         let v: LooseF64 = serde_json::from_str("-1.7976931348623157e308").expect("must parse");
         assert!(!v.is_finite());
+    }
+
+    #[test]
+    fn drops_vowels_marked_with_apostrophes() {
+        assert_eq!(mora_to_phonemes("いつ'").unwrap(), ["i", "ts"]);
+        assert_eq!(mora_to_phonemes("ス'カ").unwrap(), ["s", "k", "a"]);
+        assert_eq!(mora_to_phonemes("ウィング’").unwrap(), ["w", "i", "N", "g"]);
+        assert_eq!(
+            mora_to_phonemes("ス'テップ'").unwrap(),
+            ["s", "t", "e", "cl", "p"]
+        );
+        assert!(mora_to_phonemes("ス'").is_err());
     }
 
     #[test]
